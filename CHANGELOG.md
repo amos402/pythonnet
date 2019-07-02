@@ -5,6 +5,18 @@ This project adheres to [Semantic Versioning][].
 
 This document follows the conventions laid out in [Keep a CHANGELOG][].
 
+## [unreleased][]
+
+### Added
+
+-   Added automatic NuGet package generation in appveyor and local builds
+
+### Changed
+
+-   Added argument types information to "No method matches given arguments" message
+
+### Fixed
+
 ## [2.4.0][]
 
 ### Added
