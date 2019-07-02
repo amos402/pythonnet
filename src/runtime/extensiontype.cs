@@ -18,7 +18,25 @@ namespace Python.Runtime
             // particular concrete subclass with a hidden CLR gchandle.
 
             IntPtr tp = TypeManager.GetTypeHandle(GetType());
+            PythonException.ThrowIfIsNull(tp);
+            CreateExtensionType(tp);
+        }
 
+        public ExtensionType(IntPtr pyBaseType)
+        {
+            Type type = GetType();
+            IntPtr tp = TypeManager.GetTypeHandleWithoutCreate(type);
+            if (tp == IntPtr.Zero)
+            {
+                tp = TypeManager.BasicSubType(type.Name, pyBaseType, type);
+                TypeManager.SetTypeHandle(type, tp);
+            }
+            PythonException.ThrowIfIsNull(tp);
+            CreateExtensionType(tp);
+        }
+
+        private void CreateExtensionType(IntPtr tp)
+        {
             //int rc = (int)Marshal.ReadIntPtr(tp, TypeOffset.ob_refcnt);
             //if (rc > 1050)
             //{

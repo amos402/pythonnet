@@ -190,5 +190,21 @@ namespace Python.Runtime
         {
             return Runtime.PyErr_ExceptionMatches(ob) != 0;
         }
+
+        public static void ThrowIfIsNull(IntPtr ob)
+        {
+            if (ob == IntPtr.Zero)
+            {
+                throw new PythonException();
+            }
+        }
+
+        public static void ThrowIfIsNotZero(int value)
+        {
+            if (value != 0)
+            {
+                throw new PythonException();
+            }
+        }
     }
 }

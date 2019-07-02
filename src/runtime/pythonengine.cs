@@ -194,13 +194,19 @@ namespace Python.Runtime
 
                 // Load the clr.py resource into the clr module
                 IntPtr clr = Python.Runtime.ImportHook.GetCLRModule();
+                PythonException.ThrowIfIsNull(clr);
+
                 IntPtr clr_dict = Runtime.PyModule_GetDict(clr);
+                PythonException.ThrowIfIsNull(clr_dict);
 
                 var locals = new PyDict();
                 try
                 {
                     IntPtr module = Runtime.PyImport_AddModule("clr._extras");
+                    PythonException.ThrowIfIsNull(module);
+
                     IntPtr module_globals = Runtime.PyModule_GetDict(module);
+                    PythonException.ThrowIfIsNull(module_globals);
                     IntPtr builtins = Runtime.PyEval_GetBuiltins();
                     Runtime.PyDict_SetItemString(module_globals, "__builtins__", builtins);
 

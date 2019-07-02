@@ -66,6 +66,28 @@ namespace Python.Runtime
             return handle;
         }
 
+        public static IntPtr GetTypeHandleWithoutCreate(Type type)
+        {
+            IntPtr handle;
+            if (cache.TryGetValue(type, out handle))
+            {
+                return handle;
+            }
+            return IntPtr.Zero;
+        }
+
+        public static bool SetTypeHandle(Type type, IntPtr handle)
+        {
+            IntPtr cachedHandle;
+            bool isOverrided = false;
+            if (cache.TryGetValue(type, out cachedHandle))
+            {
+                Runtime.XDecref(cachedHandle);
+                isOverrided = true;
+            }
+            cache[type] = handle;
+            return isOverrided;
+        }
 
         /// <summary>
         /// The following CreateType implementations do the necessary work to
@@ -91,8 +113,10 @@ namespace Python.Runtime
             int flags = TypeFlags.Default | TypeFlags.Managed |
                         TypeFlags.HeapType | TypeFlags.HaveGC;
             Util.WriteCLong(type, TypeOffset.tp_flags, flags);
+            Runtime.CheckExceptionOccurred();
 
-            Runtime.PyType_Ready(type);
+            int res = Runtime.PyType_Ready(type);
+            PythonException.ThrowIfIsNotZero(res);
 
             IntPtr dict = Marshal.ReadIntPtr(type, TypeOffset.tp_dict);
             IntPtr mod = Runtime.PyString_FromString("CLR");

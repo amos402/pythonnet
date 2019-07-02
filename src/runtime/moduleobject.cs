@@ -17,7 +17,7 @@ namespace Python.Runtime
         internal IntPtr dict;
         protected string _namespace;
 
-        public ModuleObject(string name)
+        public ModuleObject(string name) : base(Runtime.PyModuleType)
         {
             if (name == string.Empty)
             {
