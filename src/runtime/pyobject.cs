@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
 using System.Linq.Expressions;
+#if PYTHON37
+using System.Runtime.InteropServices;
+#endif
 
 namespace Python.Runtime
 {
@@ -941,6 +944,27 @@ namespace Python.Runtime
         {
             return ((ulong)Runtime.PyObject_Hash(obj)).GetHashCode();
         }
+
+#if PYTHON37
+        /// <summary>
+        /// GetBuffer Method. This Method only works for objects that have a buffer (like "bytes", "bytearray" or "array.array")
+        /// </summary>
+        /// <remarks>
+        /// Send a request to the PyObject to fill in view as specified by flags. If the PyObject cannot provide a buffer of the exact type, it MUST raise PyExc_BufferError, set view->obj to NULL and return -1.
+        /// On success, fill in view, set view->obj to a new reference to exporter and return 0. In the case of chained buffer providers that redirect requests to a single object, view->obj MAY refer to this object instead of exporter(See Buffer Object Structures).
+        /// Successful calls to <see cref="PyObject.GetBuffer"/> must be paired with calls to <see cref="PyBuffer.Release"/>, similar to malloc() and free(). Thus, after the consumer is done with the buffer, <see cref="PyBuffer.Release"/> must be called exactly once.
+        /// </remarks>
+        public PyBuffer GetBuffer(out bool success, int flags)
+        {
+            int size = Marshal.SizeOf(typeof(Runtime.Py_buffer));
+            byte[] rawData = new byte[size];
+            GCHandle handle = GCHandle.Alloc(rawData, GCHandleType.Pinned);
+            IntPtr view = handle.AddrOfPinnedObject();
+
+            success = Runtime.PyObject_GetBuffer(obj, view, flags) >= 0;
+            return new PyBuffer(view, handle);
+        }
+#endif
 
 
         public long Refcount

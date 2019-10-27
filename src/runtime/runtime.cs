@@ -959,6 +959,60 @@ namespace Python.Runtime
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr PyObject_Dir(IntPtr pointer);
 
+        //====================================================================
+        // Python buffer API
+        //====================================================================
+
+#if PYTHON37
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyObject_CheckBuffer(IntPtr obj);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyObject_GetBuffer(IntPtr exporter, IntPtr view, int flags);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void PyBuffer_Release(IntPtr view);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+        internal static extern long PyBuffer_SizeFromFormat([MarshalAs(UnmanagedType.LPStr)] string format);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyBuffer_IsContiguous(IntPtr view, char order);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr PyBuffer_GetPointer(IntPtr view, long[] indices);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyBuffer_FromContiguous(IntPtr view, IntPtr buf, long len, char fort);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyBuffer_ToContiguous(IntPtr buf, IntPtr src, long len, char order);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern void PyBuffer_FillContiguousStrides(int ndims, IntPtr shape, IntPtr strides, int itemsize, char order);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyBuffer_FillInfo(IntPtr view, IntPtr exporter, IntPtr buf, long len, int _readonly, int flags);
+
+        /* buffer interface */
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct Py_buffer
+        {
+            public IntPtr buf;
+            public IntPtr obj;        /* owned reference */
+            public long len;
+            public long itemsize;  /* This is Py_ssize_t so it can be
+                             pointed to by strides in simple case.*/
+            public int _readonly;
+            public int ndim;
+            [MarshalAs(UnmanagedType.LPStr)]
+            public string format;
+            public IntPtr shape;
+            public IntPtr strides;
+            public IntPtr suboffsets;
+            public IntPtr _internal;
+        }
+#endif
 
         //====================================================================
         // Python number API
