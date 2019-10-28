@@ -6,71 +6,61 @@ using System.Text;
 
 namespace Python.Runtime
 {
-#if PYTHON37
     public class PyBuffer
     {
         private IntPtr _handle;
         private Runtime.Py_buffer _view;
         private GCHandle _gchandle;
 
-        internal PyBuffer(IntPtr handle, GCHandle gc_handle)
+        internal PyBuffer(IntPtr obj, int flags, out bool success)
         {
-            _handle = handle;
-            _gchandle = gc_handle;
-            _view = (Runtime.Py_buffer)Marshal.PtrToStructure(handle, typeof(Runtime.Py_buffer));
-        }
+            int size = Marshal.SizeOf(typeof(Runtime.Py_buffer));
+            byte[] rawData = new byte[size];
+            _gchandle = GCHandle.Alloc(rawData, GCHandleType.Pinned);
+            _handle = _gchandle.AddrOfPinnedObject();
+            _view = (Runtime.Py_buffer)Marshal.PtrToStructure(_handle, typeof(Runtime.Py_buffer));
 
-        public PyObject Object
-        {
-            get
+            success = Runtime.PyObject_GetBuffer(obj, _handle, flags) >= 0;
+
+            if (_view.shape != IntPtr.Zero)
             {
-                return new PyObject(_view.obj);
+                Shape = new long[_view.ndim];
+                Marshal.Copy(_view.shape, Shape, 0, (int)_view.len * sizeof(long));
+            }
+
+            if (_view.strides != IntPtr.Zero) {
+                Strides = new long[_view.ndim];
+                Marshal.Copy(_view.strides, Strides, 0, (int)_view.len * sizeof(long));
+            }
+
+            if (_view.suboffsets != IntPtr.Zero) {
+                SubOffsets = new long[_view.ndim];
+                Marshal.Copy(_view.suboffsets, SubOffsets, 0, (int)_view.len * sizeof(long));
             }
         }
 
-        public long Length
-        {
-            get
-            {
-                return _view.len;
-            }
-        }
+        public PyObject Object => new PyObject(_view.obj);
 
-        public long[] Shape
-        {
-            get
-            {
-                if (_view.shape == IntPtr.Zero)
-                    return null;
-                long[] shape = new long[_view.ndim];
-                Marshal.Copy(_view.shape, shape, 0, (int)_view.len * sizeof(long));
-                return shape;
-            }
-        }
+        public long Length => _view.len;
+        public int Dimensions => _view.ndim;
 
-        public long[] Strides
-        {
-            get
-            {
-                if (_view.strides == IntPtr.Zero)
-                    return null;
-                long[] strides = new long[_view.ndim];
-                Marshal.Copy(_view.strides, strides, 0, (int)_view.len * sizeof(long));
-                return strides;
-            }
-        }
+        /// <summary>
+        /// An array of length <see cref="Dimensions"/> indicating the shape of the memory as an n-dimensional array.
+        /// </summary>
+        public long[] Shape { get; }
 
-        public long[] SubOffsets
-        {
-            get
-            {
-                if (_view.suboffsets == IntPtr.Zero)
-                    return null;
-                long[] suboffsets = new long[_view.ndim];
-                Marshal.Copy(_view.suboffsets, suboffsets, 0, (int)_view.len * sizeof(long));
-                return suboffsets;
-            }
-        }
+        /// <summary>
+        /// An array of length <see cref="Dimensions"/> giving the number of bytes to skip to get to a new element in each dimension.
+        /// Will be null except when PyBUF_STRIDES or PyBUF_INDIRECT flags in GetBuffer/>.
+        /// </summary>
+        public long[] Strides { get; }
+
+        /// <summary>
+        /// An array of Py_ssize_t of length ndim. If suboffsets[n] >= 0,
+        /// the values stored along the nth dimension are pointers and the suboffset value dictates how many bytes to add to each pointer after de-referencing.
+        /// A suboffset value that is negative indicates that no de-referencing should occur (striding in a contiguous memory block).
+        /// </summary>
+        public long[] SubOffsets { get; }
 
         /// <summary>
         /// Release the buffer view and decrement the reference count for view->obj. This function MUST be called when the buffer is no longer being used, otherwise reference leaks may occur.
@@ -107,6 +97,7 @@ namespace Python.Runtime
         /// </summary>
         public IntPtr GetPointer(long[] indices)
         {
+            if (Runtime.pyversionnumber < 37) throw new NotSupportedException("GetPointer requires at least Python 3.7");
             return Runtime.PyBuffer_GetPointer(_handle, indices);
         }
 
@@ -117,6 +108,7 @@ namespace Python.Runtime
         /// <returns>0 is returned on success, -1 on error.</returns>
         public int FromContiguous(IntPtr buf, long len, char fort)
         {
+            if (Runtime.pyversionnumber < 37) throw new NotSupportedException("FromContiguous requires at least Python 3.7");
             return Runtime.PyBuffer_FromContiguous(_handle, buf, len, fort);
         }
 
@@ -127,6 +119,7 @@ namespace Python.Runtime
         /// <returns>0 is returned on success, -1 on error.</returns>
         public int ToContiguous(IntPtr buf, char order)
         {
+            if (Runtime.pyversionnumber < 36) throw new NotSupportedException("ToContiguous requires at least Python 3.6");
             return Runtime.PyBuffer_ToContiguous(buf, _handle, Length, order);
         }
 
@@ -150,7 +143,7 @@ namespace Python.Runtime
         /// </remarks>
         /// <param name="flags">The flags argument indicates the request type. This function always fills in view as specified by flags, unless buf has been designated as read-only and PyBUF_WRITABLE is set in flags.</param>
         /// <returns>On success, set view->obj to a new reference to exporter and return 0. Otherwise, raise PyExc_BufferError, set view->obj to NULL and return -1;</returns>
-        public int PyBuffer_FillInfo(IntPtr exporter, IntPtr buf, long len, int _readonly, int flags)
+        public int FillInfo(IntPtr exporter, IntPtr buf, long len, int _readonly, int flags)
         {
             return Runtime.PyBuffer_FillInfo(_handle, exporter, buf, len, _readonly, flags);
         }
@@ -158,7 +151,7 @@ namespace Python.Runtime
         /// <summary>
         /// Writes a managed byte array into the buffer of a python object. This can be used to pass data like images from managed to python.
         /// </summary>
-        public void WriteToBuffer(byte[] buffer, int offset, int count)
+        public void Write(byte[] buffer, int offset, int count)
         {
             if (count > buffer.Length) throw new ArgumentOutOfRangeException("count", "Count is bigger than the buffer.");
             if (_view.ndim != 1)
@@ -168,8 +161,7 @@ namespace Python.Runtime
             }
 
             int copylen = count < _view.len ? count : (int)_view.len;
-            Marshal.Copy(buffer, 0, _view.buf, copylen);
+            Marshal.Copy(buffer, offset, _view.buf, copylen);
         }
     }
-#endif
 }

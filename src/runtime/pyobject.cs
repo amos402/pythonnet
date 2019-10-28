@@ -945,7 +945,6 @@ namespace Python.Runtime
             return ((ulong)Runtime.PyObject_Hash(obj)).GetHashCode();
         }
 
-#if PYTHON37
         /// <summary>
         /// GetBuffer Method. This Method only works for objects that have a buffer (like "bytes", "bytearray" or "array.array")
         /// </summary>
@@ -956,15 +955,9 @@ namespace Python.Runtime
         /// </remarks>
         public PyBuffer GetBuffer(out bool success, int flags)
         {
-            int size = Marshal.SizeOf(typeof(Runtime.Py_buffer));
-            byte[] rawData = new byte[size];
-            GCHandle handle = GCHandle.Alloc(rawData, GCHandleType.Pinned);
-            IntPtr view = handle.AddrOfPinnedObject();
-
-            success = Runtime.PyObject_GetBuffer(obj, view, flags) >= 0;
-            return new PyBuffer(view, handle);
+            if (Runtime.pyversionnumber < 35) throw new NotSupportedException("GetBuffer requires at least Python 3.5");
+            return new PyBuffer(obj, flags, out success);
         }
-#endif
 
 
         public long Refcount

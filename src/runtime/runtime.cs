@@ -963,7 +963,6 @@ namespace Python.Runtime
         // Python buffer API
         //====================================================================
 
-#if PYTHON37
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int PyObject_CheckBuffer(IntPtr obj);
 
@@ -996,7 +995,7 @@ namespace Python.Runtime
 
         /* buffer interface */
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        public struct Py_buffer
+        internal struct Py_buffer
         {
             public IntPtr buf;
             public IntPtr obj;        /* owned reference */
@@ -1012,7 +1011,6 @@ namespace Python.Runtime
             public IntPtr suboffsets;
             public IntPtr _internal;
         }
-#endif
 
         //====================================================================
         // Python number API
