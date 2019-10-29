@@ -1,5 +1,3 @@
-using System.Drawing;
-using System.IO;
 using System.Text;
 using NUnit.Framework;
 using Python.Runtime;
@@ -22,6 +20,8 @@ namespace Python.EmbeddingTest {
         [Test]
         public void TestBufferWrite()
         {
+            if (Runtime.Runtime.pyversionnumber < 35) return;
+
             string bufferTestString = "hello world! !$%&/()=?";
 
             using (var scope = Py.CreateScope())
@@ -43,6 +43,8 @@ namespace Python.EmbeddingTest {
         [Test]
         public void TestBufferRead()
         {
+            if (Runtime.Runtime.pyversionnumber < 35) return;
+
             string bufferTestString = "hello world! !$%&/()=?";
 
             using (var scope = Py.CreateScope())

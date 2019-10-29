@@ -20,7 +20,6 @@ namespace Python.Runtime
             _gchandle = GCHandle.Alloc(rawData, GCHandleType.Pinned);
             _handle = _gchandle.AddrOfPinnedObject();
 
-
             if (Runtime.PyObject_GetBuffer(exporter.Handle, _handle, flags) < 0)
             {
                 _gchandle.Free();
