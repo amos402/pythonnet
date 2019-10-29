@@ -90,6 +90,7 @@
     <Compile Include="TestExample.cs" />
     <Compile Include="TestFinalizer.cs" />
     <Compile Include="TestPyAnsiString.cs" />
+	<Compile Include="TestPyBuffer.cs" />
     <Compile Include="TestPyFloat.cs" />
     <Compile Include="TestPyInt.cs" />
     <Compile Include="TestPyList.cs" />

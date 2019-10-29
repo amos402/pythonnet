@@ -1012,6 +1012,20 @@ namespace Python.Runtime
             public IntPtr _internal;
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        internal struct Py_ssize_t
+        {
+            [MarshalAs(UnmanagedType.SysInt)]
+            public IntPtr size;
+            public long GetValue()
+            {
+                if (Is32Bit)
+                    return size.ToInt32();
+                else
+                    return size.ToInt64();
+            }
+        }
+
         //====================================================================
         // Python number API
         //====================================================================

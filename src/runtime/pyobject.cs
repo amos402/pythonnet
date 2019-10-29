@@ -4,9 +4,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
 using System.Linq.Expressions;
-#if PYTHON37
-using System.Runtime.InteropServices;
-#endif
 
 namespace Python.Runtime
 {
@@ -953,10 +950,10 @@ namespace Python.Runtime
         /// On success, fill in view, set view->obj to a new reference to exporter and return 0. In the case of chained buffer providers that redirect requests to a single object, view->obj MAY refer to this object instead of exporter(See Buffer Object Structures).
         /// Successful calls to <see cref="PyObject.GetBuffer"/> must be paired with calls to <see cref="PyBuffer.Release"/>, similar to malloc() and free(). Thus, after the consumer is done with the buffer, <see cref="PyBuffer.Release"/> must be called exactly once.
         /// </remarks>
-        public PyBuffer GetBuffer(out bool success, int flags)
+        public PyBuffer GetBuffer(int flags)
         {
             if (Runtime.pyversionnumber < 35) throw new NotSupportedException("GetBuffer requires at least Python 3.5");
-            return new PyBuffer(obj, flags, out success);
+            return new PyBuffer(this, flags);
         }
 
 
