@@ -973,25 +973,25 @@ namespace Python.Runtime
         internal static extern void PyBuffer_Release(IntPtr view);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
-        internal static extern long PyBuffer_SizeFromFormat([MarshalAs(UnmanagedType.LPStr)] string format);
+        internal static extern IntPtr PyBuffer_SizeFromFormat([MarshalAs(UnmanagedType.LPStr)] string format);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int PyBuffer_IsContiguous(IntPtr view, char order);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr PyBuffer_GetPointer(IntPtr view, long[] indices);
+        internal static extern IntPtr PyBuffer_GetPointer(IntPtr view, IntPtr[] indices);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_FromContiguous(IntPtr view, IntPtr buf, long len, char fort);
+        internal static extern int PyBuffer_FromContiguous(IntPtr view, IntPtr buf, IntPtr len, char fort);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_ToContiguous(IntPtr buf, IntPtr src, long len, char order);
+        internal static extern int PyBuffer_ToContiguous(IntPtr buf, IntPtr src, IntPtr len, char order);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void PyBuffer_FillContiguousStrides(int ndims, IntPtr shape, IntPtr strides, int itemsize, char order);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_FillInfo(IntPtr view, IntPtr exporter, IntPtr buf, long len, int _readonly, int flags);
+        internal static extern int PyBuffer_FillInfo(IntPtr view, IntPtr exporter, IntPtr buf, IntPtr len, int _readonly, int flags);
 
         /* buffer interface */
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
@@ -999,10 +999,13 @@ namespace Python.Runtime
         {
             public IntPtr buf;
             public IntPtr obj;        /* owned reference */
-            public long len;
-            public long itemsize;  /* This is Py_ssize_t so it can be
+            [MarshalAs(UnmanagedType.SysInt)]
+            public IntPtr len;
+            [MarshalAs(UnmanagedType.SysInt)]
+            public IntPtr itemsize;  /* This is Py_ssize_t so it can be
                              pointed to by strides in simple case.*/
-            public int _readonly;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool _readonly;
             public int ndim;
             [MarshalAs(UnmanagedType.LPStr)]
             public string format;
@@ -1010,20 +1013,6 @@ namespace Python.Runtime
             public IntPtr strides;
             public IntPtr suboffsets;
             public IntPtr _internal;
-        }
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-        internal struct Py_ssize_t
-        {
-            [MarshalAs(UnmanagedType.SysInt)]
-            public IntPtr size;
-            public long GetValue()
-            {
-                if (Is32Bit)
-                    return size.ToInt32();
-                else
-                    return size.ToInt64();
-            }
         }
 
         //====================================================================
