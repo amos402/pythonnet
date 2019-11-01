@@ -121,6 +121,7 @@
     <Compile Include="nativecall.cs" />
     <Compile Include="overload.cs" />
     <Compile Include="propertyobject.cs" />
+    <Compile Include="Py_Buffer.cs" />
     <Compile Include="pyansistring.cs" />
     <Compile Include="pybuffer.cs" />
     <Compile Include="pydict.cs" />

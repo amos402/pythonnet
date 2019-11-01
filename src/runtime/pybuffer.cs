@@ -6,28 +6,34 @@ using System.Text;
 
 namespace Python.Runtime
 {
-    public class PyBuffer : IDisposable
+    public enum BufferOrderStyle
+    {
+        C,
+        Fortran,
+        EitherOne,
+    }
+
+    public sealed class PyBuffer : IDisposable
     {
         private PyObject _exporter;
-        private IntPtr _handle;
-        private Runtime.Py_buffer _view;
+        private Py_buffer _view;
         private GCHandle _gchandle;
 
         unsafe internal PyBuffer(PyObject exporter, int flags)
         {
-            int size = Marshal.SizeOf(typeof(Runtime.Py_buffer));
+            int size = Marshal.SizeOf(typeof(Py_buffer));
             byte[] rawData = new byte[size];
             _gchandle = GCHandle.Alloc(rawData, GCHandleType.Pinned);
-            _handle = _gchandle.AddrOfPinnedObject();
+            IntPtr handle = _gchandle.AddrOfPinnedObject();
 
-            if (Runtime.PyObject_GetBuffer(exporter.Handle, _handle, flags) < 0)
+            if (Runtime.PyObject_GetBuffer(exporter.Handle, handle, flags) < 0)
             {
                 _gchandle.Free();
                 throw new PythonException();
             }
 
             _exporter = exporter;
-            _view = (Runtime.Py_buffer)Marshal.PtrToStructure(_handle, typeof(Runtime.Py_buffer));
+            _view = (Py_buffer)Marshal.PtrToStructure(handle, typeof(Py_buffer));
 
             var intPtrBuf = new IntPtr[_view.ndim];
             if (_view.shape != IntPtr.Zero)
@@ -52,6 +58,7 @@ namespace Python.Runtime
         public long ItemSize => (long)_view.itemsize;
         public int Dimensions => _view.ndim;
         public bool ReadOnly => _view._readonly;
+        public IntPtr Buffer => _view.buf;
 
         /// <summary>
         /// An array of length <see cref="Dimensions"/> indicating the shape of the memory as an n-dimensional array.
@@ -78,7 +85,7 @@ namespace Python.Runtime
         public static long SizeFromFormat(string format)
         {
             if (Runtime.pyversionnumber < 39)
-                throw new NotSupportedException("GetPointer requires at least Python 3.9");
+                throw new NotSupportedException("SizeFromFormat requires at least Python 3.9");
             return (long)Runtime.PyBuffer_SizeFromFormat(format);
         }
 
@@ -86,11 +93,20 @@ namespace Python.Runtime
         /// Returns true if the memory defined by the view is C-style (order is 'C') or Fortran-style (order is 'F') contiguous or either one (order is 'A'). Returns false otherwise.
         /// </summary>
         /// <param name="order">C-style (order is 'C') or Fortran-style (order is 'F') contiguous or either one (order is 'A')</param>
-        public bool IsContiguous(char order)
+        public bool IsContiguous(BufferOrderStyle order)
         {
             if (disposedValue)
                 throw new ObjectDisposedException(nameof(PyBuffer));
-            return Convert.ToBoolean(Runtime.PyBuffer_IsContiguous(_handle, order));
+
+            char style = 'C';
+            if (order == BufferOrderStyle.C)
+                style = 'C';
+            else if (order == BufferOrderStyle.Fortran)
+                style = 'F';
+            else if (order == BufferOrderStyle.EitherOne)
+                style = 'A';
+
+            return Convert.ToBoolean(Runtime.PyBuffer_IsContiguous(_gchandle.AddrOfPinnedObject(), style));
         }
 
         /// <summary>
@@ -102,20 +118,29 @@ namespace Python.Runtime
                 throw new ObjectDisposedException(nameof(PyBuffer));
             if (Runtime.pyversionnumber < 37)
                 throw new NotSupportedException("GetPointer requires at least Python 3.7");
-            return Runtime.PyBuffer_GetPointer(_handle, indices.Select(x => (IntPtr)x).ToArray());
+            return Runtime.PyBuffer_GetPointer(_gchandle.AddrOfPinnedObject(), indices.Select(x => (IntPtr)x).ToArray());
         }
 
         /// <summary>
-        /// Copy contiguous len bytes from buf to view. fort can be 'C' or 'F' (for C-style or Fortran-style ordering). 0 is returned on success, -1 on error.
+        /// Copy contiguous len bytes from buf to view. fort can be 'C' or 'F' (for C-style or Fortran-style ordering).
         /// </summary>
-        /// <returns>0 is returned on success, -1 on error.</returns>
-        public int FromContiguous(IntPtr buf, long len, char fort)
+        public void FromContiguous(IntPtr buf, long len, BufferOrderStyle fort)
         {
             if (disposedValue)
                 throw new ObjectDisposedException(nameof(PyBuffer));
             if (Runtime.pyversionnumber < 37)
                 throw new NotSupportedException("FromContiguous requires at least Python 3.7");
-            return Runtime.PyBuffer_FromContiguous(_handle, buf, (IntPtr)len, fort);
+
+            char style = 'C';
+            if (fort == BufferOrderStyle.C)
+                style = 'C';
+            else if (fort == BufferOrderStyle.Fortran)
+                style = 'F';
+            else if (fort == BufferOrderStyle.EitherOne)
+                throw new ArgumentException("BufferOrderStyle can not be EitherOne and has to be C or Fortran", nameof(fort));
+
+            if (Runtime.PyBuffer_FromContiguous(_gchandle.AddrOfPinnedObject(), buf, (IntPtr)len, style) < 0)
+                throw new PythonException();
         }
 
         /// <summary>
@@ -123,22 +148,39 @@ namespace Python.Runtime
         /// </summary>
         /// <param name="order">order can be 'C' or 'F' or 'A' (for C-style or Fortran-style ordering or either one).</param>
         /// <param name="buf">Buffer to copy to</param>
-        /// <returns>0 is returned on success, -1 on error.</returns>
-        public int ToContiguous(IntPtr buf, char order)
+        public void ToContiguous(IntPtr buf, BufferOrderStyle order)
         {
             if (disposedValue)
                 throw new ObjectDisposedException(nameof(PyBuffer));
             if (Runtime.pyversionnumber < 36)
                 throw new NotSupportedException("ToContiguous requires at least Python 3.6");
-            return Runtime.PyBuffer_ToContiguous(buf, _handle, _view.len, order);
+
+            char style = 'C';
+            if (order == BufferOrderStyle.C)
+                style = 'C';
+            else if (order == BufferOrderStyle.Fortran)
+                style = 'F';
+            else if (order == BufferOrderStyle.EitherOne)
+                style = 'A';
+
+            if (Runtime.PyBuffer_ToContiguous(buf, _gchandle.AddrOfPinnedObject(), _view.len, style) < 0)
+                throw new PythonException();
         }
 
         /// <summary>
         /// Fill the strides array with byte-strides of a contiguous (C-style if order is 'C' or Fortran-style if order is 'F') array of the given shape with the given number of bytes per element.
         /// </summary>
-        public static void FillContiguousStrides(int ndims, IntPtr shape, IntPtr strides, int itemsize, char order)
+        public static void FillContiguousStrides(int ndims, IntPtr shape, IntPtr strides, int itemsize, BufferOrderStyle order)
         {
-            Runtime.PyBuffer_FillContiguousStrides(ndims, shape, strides, itemsize, order);
+            char style = 'C';
+            if (order == BufferOrderStyle.C)
+                style = 'C';
+            else if (order == BufferOrderStyle.Fortran)
+                style = 'F';
+            else if (order == BufferOrderStyle.EitherOne)
+                throw new ArgumentException("BufferOrderStyle can not be EitherOne and has to be C or Fortran", nameof(order));
+
+            Runtime.PyBuffer_FillContiguousStrides(ndims, shape, strides, itemsize, style);
         }
 
         /// <summary>
@@ -151,11 +193,12 @@ namespace Python.Runtime
         /// If this function is used as part of a getbufferproc, exporter MUST be set to the exporting object and flags must be passed unmodified.Otherwise, exporter MUST be NULL.
         /// </remarks>
         /// <returns>On success, set view->obj to a new reference to exporter and return 0. Otherwise, raise PyExc_BufferError, set view->obj to NULL and return -1;</returns>
-        public int FillInfo(IntPtr exporter, IntPtr buf, long len, int _readonly, int flags)
+        public void FillInfo(IntPtr exporter, IntPtr buf, long len, bool _readonly, int flags)
         {
             if (disposedValue)
                 throw new ObjectDisposedException(nameof(PyBuffer));
-            return Runtime.PyBuffer_FillInfo(_handle, exporter, buf, (IntPtr)len, _readonly, flags);
+            if (Runtime.PyBuffer_FillInfo(_gchandle.AddrOfPinnedObject(), exporter, buf, (IntPtr)len, Convert.ToInt32(_readonly), flags) < 0)
+                throw new PythonException();
         }
 
         /// <summary>
@@ -167,14 +210,16 @@ namespace Python.Runtime
                 throw new ObjectDisposedException(nameof(PyBuffer));
             if (ReadOnly)
                 throw new InvalidOperationException("Buffer is read-only");
+            if ((long)_view.len > int.MaxValue)
+                throw new NotSupportedException("Python buffers bigger than int.MaxValue are not supported.");
             if (count > buffer.Length)
                 throw new ArgumentOutOfRangeException("count", "Count is bigger than the buffer.");
-            // we dont support multidimensional arrays or scalars
+            if (count > (int)_view.len)
+                throw new ArgumentOutOfRangeException("count", "Count is bigger than the python buffer.");
             if (_view.ndim != 1)
                 throw new NotSupportedException("Multidimensional arrays, scalars and objects without a buffer are not supported.");
 
-            int copylen = count < (int)_view.len ? count : (int)_view.len;
-            Marshal.Copy(buffer, offset, _view.buf, copylen);
+            Marshal.Copy(buffer, offset, _view.buf, count);
         }
 
         /// <summary>
@@ -185,9 +230,10 @@ namespace Python.Runtime
                 throw new ObjectDisposedException(nameof(PyBuffer));
             if (count > buffer.Length)
                 throw new ArgumentOutOfRangeException("count", "Count is bigger than the buffer.");
-            // we dont support multidimensional arrays or scalars
             if (_view.ndim != 1)
                 throw new NotSupportedException("Multidimensional arrays, scalars and objects without a buffer are not supported.");
+            if (_view.len.ToInt64() > int.MaxValue)
+                throw new NotSupportedException("Python buffers bigger than int.MaxValue are not supported.");
 
             int copylen = count < (int)_view.len ? count : (int)_view.len;
             Marshal.Copy(_view.buf, buffer, offset, copylen);
@@ -196,10 +242,10 @@ namespace Python.Runtime
 
         private bool disposedValue = false; // To detect redundant calls
 
-        protected virtual void Dispose(bool disposing)
+        private void Dispose(bool disposing)
         {
             if (!disposedValue) {
-                Runtime.PyBuffer_Release(_handle);
+                Runtime.PyBuffer_Release(_gchandle.AddrOfPinnedObject());
                 _gchandle.Free();
                 _exporter = null;
                 Shape = null;
