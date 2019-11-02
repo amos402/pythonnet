@@ -967,31 +967,31 @@ namespace Python.Runtime
         internal static extern int PyObject_CheckBuffer(IntPtr obj);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyObject_GetBuffer(IntPtr exporter, IntPtr view, int flags);
+        internal static extern int PyObject_GetBuffer(IntPtr exporter, ref Py_buffer view, int flags);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern void PyBuffer_Release(IntPtr view);
+        internal static extern void PyBuffer_Release(ref Py_buffer view);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
         internal static extern IntPtr PyBuffer_SizeFromFormat([MarshalAs(UnmanagedType.LPStr)] string format);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_IsContiguous(IntPtr view, char order);
+        internal static extern int PyBuffer_IsContiguous(ref Py_buffer view, char order);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern IntPtr PyBuffer_GetPointer(IntPtr view, IntPtr[] indices);
+        internal static extern IntPtr PyBuffer_GetPointer(ref Py_buffer view, IntPtr[] indices);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_FromContiguous(IntPtr view, IntPtr buf, IntPtr len, char fort);
+        internal static extern int PyBuffer_FromContiguous(ref Py_buffer view, IntPtr buf, IntPtr len, char fort);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_ToContiguous(IntPtr buf, IntPtr src, IntPtr len, char order);
+        internal static extern int PyBuffer_ToContiguous(IntPtr buf, ref Py_buffer src, IntPtr len, char order);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void PyBuffer_FillContiguousStrides(int ndims, IntPtr shape, IntPtr strides, int itemsize, char order);
 
         [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
-        internal static extern int PyBuffer_FillInfo(IntPtr view, IntPtr exporter, IntPtr buf, IntPtr len, int _readonly, int flags);
+        internal static extern int PyBuffer_FillInfo(ref Py_buffer view, IntPtr exporter, IntPtr buf, IntPtr len, int _readonly, int flags);
 
         //====================================================================
         // Python number API

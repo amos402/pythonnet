@@ -30,7 +30,7 @@ namespace Python.EmbeddingTest {
                 PyObject pythonArray = scope.Get("arr");
                 byte[] managedArray = new UTF8Encoding().GetBytes(bufferTestString);
 
-                using (PyBuffer buf = pythonArray.GetBuffer(0))
+                using (PyBuffer buf = pythonArray.GetBuffer())
                 {
                     buf.Write(managedArray, 0, managedArray.Length);
                 }
@@ -53,7 +53,7 @@ namespace Python.EmbeddingTest {
                 PyObject pythonArray = scope.Get("arr");
                 byte[] managedArray = new byte[bufferTestString.Length];
 
-                using (PyBuffer buf = pythonArray.GetBuffer(0))
+                using (PyBuffer buf = pythonArray.GetBuffer())
                 {
                     buf.Read(managedArray, 0, managedArray.Length);
                 }
