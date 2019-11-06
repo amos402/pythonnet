@@ -24,19 +24,22 @@ namespace Python.EmbeddingTest {
 
             string bufferTestString = "hello world! !$%&/()=?";
 
-            using (var scope = Py.CreateScope())
+            using (Py.GIL())
             {
-                scope.Exec($"arr = bytearray({bufferTestString.Length})");
-                PyObject pythonArray = scope.Get("arr");
-                byte[] managedArray = new UTF8Encoding().GetBytes(bufferTestString);
-
-                using (PyBuffer buf = pythonArray.GetBuffer())
+                using (var scope = Py.CreateScope())
                 {
-                    buf.Write(managedArray, 0, managedArray.Length);
-                }
+                    scope.Exec($"arr = bytearray({bufferTestString.Length})");
+                    PyObject pythonArray = scope.Get("arr");
+                    byte[] managedArray = new UTF8Encoding().GetBytes(bufferTestString);
 
-                string result = scope.Eval("arr.decode('utf-8')").ToString();
-                Assert.IsTrue(result == bufferTestString);
+                    using (PyBuffer buf = pythonArray.GetBuffer())
+                    {
+                        buf.Write(managedArray, 0, managedArray.Length);
+                    }
+
+                    string result = scope.Eval("arr.decode('utf-8')").ToString();
+                    Assert.IsTrue(result == bufferTestString);
+                }
             }
         }
 
@@ -47,19 +50,22 @@ namespace Python.EmbeddingTest {
 
             string bufferTestString = "hello world! !$%&/()=?";
 
-            using (var scope = Py.CreateScope())
+            using (Py.GIL())
             {
-                scope.Exec($"arr = b'{bufferTestString}'");
-                PyObject pythonArray = scope.Get("arr");
-                byte[] managedArray = new byte[bufferTestString.Length];
-
-                using (PyBuffer buf = pythonArray.GetBuffer())
+                using (var scope = Py.CreateScope())
                 {
-                    buf.Read(managedArray, 0, managedArray.Length);
-                }
+                    scope.Exec($"arr = b'{bufferTestString}'");
+                    PyObject pythonArray = scope.Get("arr");
+                    byte[] managedArray = new byte[bufferTestString.Length];
 
-                string result = new UTF8Encoding().GetString(managedArray);
-                Assert.IsTrue(result == bufferTestString);
+                    using (PyBuffer buf = pythonArray.GetBuffer())
+                    {
+                        buf.Read(managedArray, 0, managedArray.Length);
+                    }
+
+                    string result = new UTF8Encoding().GetString(managedArray);
+                    Assert.IsTrue(result == bufferTestString);
+                }
             }
         }
     }

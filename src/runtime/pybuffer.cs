@@ -226,10 +226,10 @@ namespace Python.Runtime
             }
         }
 
-        //~PyBuffer()
-        //{
-        //    Dispose(false);
-        //}
+        ~PyBuffer()
+        {
+            Dispose(false);
+        }
 
         /// <summary>
         /// Release the buffer view and decrement the reference count for view->obj. This function MUST be called when the buffer is no longer being used, otherwise reference leaks may occur.
@@ -238,7 +238,7 @@ namespace Python.Runtime
         public void Dispose()
         {
             Dispose(true);
-            //GC.SuppressFinalize(this);
+            GC.SuppressFinalize(this);
         }
     }
 }
