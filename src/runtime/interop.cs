@@ -4,6 +4,8 @@ using System.Collections.Specialized;
 using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Text;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Python.Runtime
 {
@@ -261,6 +263,14 @@ namespace Python.Runtime
     }
 #endif // PYTHON3
 
+    static class TypeOffsetHelper
+    {
+        public static string GetSlotNameByOffset(int offset)
+        {
+            return typeof(TypeOffset).GetFields().First(fi => (int)fi.GetValue(null) == offset).Name;
+        }
+    }
+
     /// <summary>
     /// TypeFlags(): The actual bit values for the Type Flags stored
     /// in a class.
@@ -334,7 +344,6 @@ namespace Python.Runtime
 
     internal class Interop
     {
-        private static ArrayList keepAlive;
         private static Hashtable pmap;
 
         static Interop()
@@ -351,8 +360,6 @@ namespace Python.Runtime
                 p[item.Name] = item;
             }
 
-            keepAlive = new ArrayList();
-            Marshal.AllocHGlobal(IntPtr.Size);
             pmap = new Hashtable();
 
             pmap["tp_dealloc"] = p["DestructorFunc"];
@@ -449,7 +456,7 @@ namespace Python.Runtime
             return pmap[name] as Type;
         }
 
-        internal static IntPtr GetThunk(MethodInfo method, string funcType = null)
+        internal static ThunkInfo GetThunk(MethodInfo method, string funcType = null)
         {
             Type dt;
             if (funcType != null)
@@ -457,19 +464,19 @@ namespace Python.Runtime
             else
                 dt = GetPrototype(method.Name);
 
-            if (dt != null)
+            if (dt == null)
             {
-                IntPtr tmp = Marshal.AllocHGlobal(IntPtr.Size);
-                Delegate d = Delegate.CreateDelegate(dt, method);
-                Thunk cb = new Thunk(d);
-                Marshal.StructureToPtr(cb, tmp, false);
-                IntPtr fp = Marshal.ReadIntPtr(tmp, 0);
-                Marshal.FreeHGlobal(tmp);
-                keepAlive.Add(d);
-                return fp;
+                return ThunkInfo.Empty;
             }
-            return IntPtr.Zero;
+            IntPtr tmp = Marshal.AllocHGlobal(IntPtr.Size);
+            Delegate d = Delegate.CreateDelegate(dt, method);
+            Thunk cb = new Thunk(d);
+            Marshal.StructureToPtr(cb, tmp, false);
+            IntPtr fp = Marshal.ReadIntPtr(tmp, 0);
+            Marshal.FreeHGlobal(tmp);
+            return new ThunkInfo(d, fp);
         }
+
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate IntPtr UnaryFunc(IntPtr ob);
@@ -521,5 +528,43 @@ namespace Python.Runtime
         {
             fn = d;
         }
+    }
+
+    internal struct ThunkInfo
+    {
+        public Delegate Target;
+        public IntPtr Address;
+
+        public static readonly ThunkInfo Empty = new ThunkInfo(null, IntPtr.Zero);
+
+        public ThunkInfo(Delegate target, IntPtr addr)
+        {
+            Target = target;
+            Address = addr;
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    struct PyGC_Node
+    {
+        public IntPtr gc_next;
+        public IntPtr gc_prev;
+        public IntPtr gc_refs;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    struct PyGC_Head
+    {
+        public PyGC_Node gc;
+    }
+
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    struct PyMethodDef
+    {
+        public IntPtr ml_name;
+        public IntPtr ml_meth;
+        public int ml_flags;
+        public IntPtr ml_doc;
     }
 }

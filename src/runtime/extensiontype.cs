@@ -28,7 +28,7 @@ namespace Python.Runtime
 
             IntPtr py = Runtime.PyType_GenericAlloc(tp, 0);
 
-            GCHandle gc = GCHandle.Alloc(this);
+            GCHandle gc = AllocGCHandle(true);
             Marshal.WriteIntPtr(py, ObjectOffset.magic(tp), (IntPtr)gc);
 
             // We have to support gc because the type machinery makes it very
@@ -38,9 +38,9 @@ namespace Python.Runtime
 
             Runtime.PyObject_GC_UnTrack(py);
 
+            // Steals a ref to tpHandle.
             tpHandle = tp;
             pyHandle = py;
-            gcHandle = gc;
         }
 
 
@@ -50,8 +50,9 @@ namespace Python.Runtime
         public static void FinalizeObject(ManagedType self)
         {
             Runtime.PyObject_GC_Del(self.pyHandle);
-            Runtime.XDecref(self.tpHandle);
-            self.gcHandle.Free();
+            // Not necessary decref for `tpHandle`.
+            // Runtime.XDecref(self.tpHandle);
+            self.FreeGCHandle();
         }
 
 

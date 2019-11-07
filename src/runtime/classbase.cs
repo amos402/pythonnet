@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace Python.Runtime
@@ -28,13 +29,6 @@ namespace Python.Runtime
             return !type.IsEnum;
         }
 
-        /// <summary>
-        /// Implements __init__ for reflected classes and value types.
-        /// </summary>
-        public static int tp_init(IntPtr ob, IntPtr args, IntPtr kw)
-        {
-            return 0;
-        }
 
         /// <summary>
         /// Default implementation of [] semantics for reflected types.
@@ -291,15 +285,42 @@ namespace Python.Runtime
         public static void tp_dealloc(IntPtr ob)
         {
             ManagedType self = GetManagedObject(ob);
-            IntPtr dict = Marshal.ReadIntPtr(ob, ObjectOffset.DictOffset(ob));
-            if (dict != IntPtr.Zero)
-            {
-                Runtime.XDecref(dict);
-            }
+            tp_clear(ob);
             Runtime.PyObject_GC_UnTrack(self.pyHandle);
             Runtime.PyObject_GC_Del(self.pyHandle);
-            Runtime.XDecref(self.tpHandle);
-            self.gcHandle.Free();
+            self.FreeGCHandle();
+        }
+
+        public static int tp_clear(IntPtr ob)
+        {
+            ManagedType self = GetManagedObject(ob);
+            if (self.pyHandle != self.tpHandle)
+            {
+                ClearObjectDict(ob);
+            }
+            Runtime.Py_CLEAR(ref self.tpHandle);
+            return 0;
+        }
+
+        private static IntPtr GetObjectDict(IntPtr ob)
+        {
+            return Marshal.ReadIntPtr(ob, ObjectOffset.DictOffset(ob));
+        }
+
+        private static void SetObjectDict(IntPtr ob, IntPtr value)
+        {
+            Marshal.WriteIntPtr(ob, ObjectOffset.DictOffset(ob), value);
+        }
+
+        private static void ClearObjectDict(IntPtr ob)
+        {
+            IntPtr dict = GetObjectDict(ob);
+            if (dict == IntPtr.Zero)
+            {
+                return;
+            }
+            SetObjectDict(ob, IntPtr.Zero);
+            Runtime.XDecref(dict);
         }
     }
 }

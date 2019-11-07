@@ -22,6 +22,15 @@ namespace Python.Runtime
             return PyCLRMetaType;
         }
 
+        public static void Release()
+        {
+            if (Runtime.Refcount(PyCLRMetaType) > 1)
+            {
+                SlotsHolder.ReleaseTypeSlots(PyCLRMetaType);
+            }
+            Runtime.XDecref(PyCLRMetaType);
+            PyCLRMetaType = IntPtr.Zero;
+        }
 
         /// <summary>
         /// Metatype __new__ implementation. This is called to create a new
@@ -266,6 +275,7 @@ namespace Python.Runtime
                 return Runtime.PyFalse;
             }
 
+            Runtime.XIncref(args);
             using (var argsObj = new PyList(args))
             {
                 if (argsObj.Length() != 1)

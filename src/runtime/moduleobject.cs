@@ -300,6 +300,39 @@ namespace Python.Runtime
             var self = (ModuleObject)GetManagedObject(ob);
             return Runtime.PyString_FromString($"<module '{self.moduleName}'>");
         }
+
+        public new static void tp_dealloc(IntPtr ob)
+        {
+            var self = (ModuleObject)GetManagedObject(ob);
+            tp_clear(ob);
+            ExtensionType.tp_dealloc(ob);
+        }
+
+        public static int tp_traverse(IntPtr ob, IntPtr visit, IntPtr arg)
+        {
+            var self = (ModuleObject)GetManagedObject(ob);
+            int res = PyVisit(self.dict, visit, arg);
+            if (res != 0) return res;
+            foreach (var attr in self.cache.Values)
+            {
+                res = PyVisit(attr.pyHandle, visit, arg);
+                if (res != 0) return res;
+            }
+            return 0;
+        }
+
+        public static int tp_clear(IntPtr ob)
+        {
+            var self = (ModuleObject)GetManagedObject(ob);
+            Runtime.XDecref(self.dict);
+            self.dict = IntPtr.Zero;
+            foreach (var attr in self.cache.Values)
+            {
+                Runtime.XDecref(attr.pyHandle);
+            }
+            self.cache.Clear();
+            return 0;
+        }
     }
 
     /// <summary>
