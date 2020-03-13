@@ -48,6 +48,13 @@ namespace Python.EmbeddingTest
             Assert.IsFalse(called, "The event handler was called before it was installed");
             Finalizer.Instance.CollectOnce += handler;
 
+            void ErrorHandler(object sender, Finalizer.ErrorArgs e)
+            {
+                Console.WriteLine(e.Error);
+            }
+
+            Finalizer.Instance.ErrorHandler += ErrorHandler;
+
             WeakReference shortWeak;
             WeakReference longWeak;
             {
@@ -82,6 +89,7 @@ namespace Python.EmbeddingTest
             finally
             {
                 Finalizer.Instance.CollectOnce -= handler;
+                Finalizer.Instance.ErrorHandler -= ErrorHandler;
             }
             Assert.IsTrue(called, "The event handler was not called during finalization");
             Assert.GreaterOrEqual(objectCount, 1);
