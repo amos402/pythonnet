@@ -77,6 +77,7 @@ namespace Python.Runtime
 
         public void Collect(bool forceDispose = true)
         {
+            System.Console.WriteLine($"finalizer state: {Instance._finalizerTask != null}, {!Instance._finalizerTask.IsCompleted}");
             if (Instance._finalizerTask != null
                 && !Instance._finalizerTask.IsCompleted)
             {

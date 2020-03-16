@@ -92,7 +92,9 @@ namespace Python.EmbeddingTest
             }
             try
             {
-                Finalizer.Instance.Collect(forceDispose: true);
+                System.Console.WriteLine("Finalizer.Instance.Collect(forceDispose: false);");
+                Finalizer.Instance.Collect(forceDispose: false);
+                System.Console.WriteLine("Done Finalizer.Instance.Collect(forceDispose: false);");
             }
             finally
             {
