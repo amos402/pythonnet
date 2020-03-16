@@ -28,6 +28,13 @@ namespace Python.EmbeddingTest
         private static void FullGCCollect()
         {
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+            try
+            {
+                GC.WaitForFullGCComplete();
+            }
+            catch (NotImplementedException)
+            {
+            }
             GC.WaitForPendingFinalizers();
         }
 
@@ -51,6 +58,7 @@ namespace Python.EmbeddingTest
             void ErrorHandler(object sender, Finalizer.ErrorArgs e)
             {
                 Console.WriteLine(e.Error);
+                Assert.Fail("error");
             }
 
             Finalizer.Instance.ErrorHandler += ErrorHandler;

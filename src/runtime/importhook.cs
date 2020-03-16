@@ -151,6 +151,7 @@ namespace Python.Runtime
         /// </summary>
         public static IntPtr GetCLRModule(IntPtr? fromList = null)
         {
+            System.Diagnostics.Debug.Assert(root != null);
             root.InitializePreload();
 
             if (Runtime.IsPython2)
