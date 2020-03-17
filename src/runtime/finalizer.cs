@@ -77,12 +77,15 @@ namespace Python.Runtime
 
         public void Collect(bool forceDispose = true)
         {
-            System.Console.WriteLine($"finalizer state: {Instance._finalizerTask != null}, {!Instance._finalizerTask.IsCompleted}");
-            if (Instance._finalizerTask != null
-                && !Instance._finalizerTask.IsCompleted)
+            if (_finalizerTask != null)
+            {
+                System.Console.WriteLine($"finalizer state: {_finalizerTask != null}, {!_finalizerTask.IsCompleted}");
+            }
+            if (_finalizerTask != null
+                && !_finalizerTask.IsCompleted)
             {
                 var ts = PythonEngine.BeginAllowThreads();
-                Instance._finalizerTask.Wait();
+                _finalizerTask.Wait();
                 PythonEngine.EndAllowThreads(ts);
             }
             else if (forceDispose)
