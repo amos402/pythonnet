@@ -87,6 +87,7 @@ namespace Python.Runtime
                 var ts = PythonEngine.BeginAllowThreads();
                 _finalizerTask.Wait();
                 PythonEngine.EndAllowThreads(ts);
+                System.Console.WriteLine($"garbage count: {_objQueue.Count}");
             }
             else if (forceDispose)
             {
