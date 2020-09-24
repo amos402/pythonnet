@@ -174,7 +174,7 @@ namespace Python.Runtime
             MainManagedThreadId = Thread.CurrentThread.ManagedThreadId;
 
             IsFinalizing = false;
-
+            InternString.Initialize();
             GenericUtil.Reset();
             PyScopeManager.Reset();
             ClassManager.Reset();
@@ -250,7 +250,7 @@ namespace Python.Runtime
                 // a wrapper_descriptor, even though dict.__setitem__ is.
                 //
                 // object.__init__ seems safe, though.
-                op = PyObject_GetAttrString(PyBaseObjectType, "__init__");
+                op = PyObject_GetAttr(PyBaseObjectType, PyIdentifier.__init__);
                 SetPyMember(ref PyWrapperDescriptorType, PyObject_Type(op),
                     () => PyWrapperDescriptorType = IntPtr.Zero);
                 XDecref(op);
@@ -395,6 +395,7 @@ namespace Python.Runtime
 
             Exceptions.Shutdown();
             Finalizer.Shutdown();
+            InternString.Shutdown();
 
             if (mode != ShutdownMode.Normal)
             {
@@ -1611,6 +1612,12 @@ namespace Python.Runtime
             return PyUnicode_FromUnicode(s, s.Length);
         }
 
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr PyUnicode_InternFromString(string s);
+
+        [DllImport(_PythonDll, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int PyUnicode_Compare(IntPtr left, IntPtr right);
+
         internal static string GetManagedString(in BorrowedReference borrowedReference)
             => GetManagedString(borrowedReference.DangerousGetAddress());
         /// <summary>
@@ -2196,7 +2203,7 @@ namespace Python.Runtime
         /// </summary>
         internal static IntPtr GetBuiltins()
         {
-            return PyImport_ImportModule("builtins");
+            return PyImport_Import(PyIdentifier.builtins);
         }
     }
 
