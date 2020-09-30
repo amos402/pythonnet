@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using Python.Runtime;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
@@ -108,20 +109,27 @@ namespace Python.EmbeddingTest
                 shortWeak = null;
                 longWeak = null;
             }
-            FullGCCollect();
-            var garbage = Finalizer.Instance.GetCollectedObjects();
-            Assert.IsNotEmpty(garbage);
             bool found = false;
-            foreach (var item in garbage)
+            List<WeakReference> garbage = null;
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
+            do
             {
-                var obj = item.Target as PyObject;
-                if (obj == null) continue;
-                if (obj.Handle == op)
+                FullGCCollect();
+                garbage = Finalizer.Instance.GetCollectedObjects();
+                Assert.IsNotEmpty(garbage);
+                foreach (var item in garbage)
                 {
-                    found = true;
-                    break;
+                    var obj = item.Target as PyObject;
+                    if (obj == null) continue;
+                    if (obj.Handle == op)
+                    {
+                        found = true;
+                        break;
+                    }
                 }
-            }
+            } while (!found && stopwatch.Elapsed < new TimeSpan(60000));
+
             Assert.IsTrue(found);
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
