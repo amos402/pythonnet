@@ -100,6 +100,8 @@ namespace Python.EmbeddingTest
         public void CollectOnShutdown()
         {
             MakeAGarbage(out var shortWeak, out var longWeak);
+            shortWeak = null;
+            longWeak = null;
             FullGCCollect();
             var garbage = Finalizer.Instance.GetCollectedObjects();
             Assert.IsNotEmpty(garbage);

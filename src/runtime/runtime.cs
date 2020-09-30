@@ -396,7 +396,7 @@ namespace Python.Runtime
                 catch (NotImplementedException)
                 {
                     // Some clr runtime didn't implement GC.WaitForFullGCComplete yet.
-                    Thread.Sleep(10000); // simulate wait for gc
+                    //Thread.Sleep(10000); // simulate wait for gc
                 }
                 GC.WaitForPendingFinalizers();
                 PyGILState_Release(state);
