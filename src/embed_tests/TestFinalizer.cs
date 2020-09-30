@@ -1,6 +1,7 @@
 using NUnit.Framework;
 using Python.Runtime;
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -104,6 +105,19 @@ namespace Python.EmbeddingTest
             Assert.IsNotEmpty(garbage);
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
+            if (garbage.Count > 0)
+            {
+                foreach (var item in garbage)
+                {
+                    if (!item.IsAlive) continue;
+                    var obj = item.Target as PyObject;
+                    if (obj == null)
+                    {
+                        continue;
+                    }
+                    TestContext.Out.WriteLine(obj.Traceback);
+                }
+            }
             Assert.IsEmpty(garbage);
         }
 
