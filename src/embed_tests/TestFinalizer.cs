@@ -115,9 +115,9 @@ namespace Python.EmbeddingTest
                 Assert.IsFalse(shortWeak.IsAlive);
             }
             var garbage = Finalizer.Instance.GetCollectedObjects();
-            Assert.IsNotEmpty(garbage);
+            Assert.IsNotEmpty(garbage, "The garbage object should be collected");
             bool hasTarget = garbage.Any(r => ((IPyDisposable)r.Target).GetTrackedHandles().Contains(op));
-            Assert.IsTrue(hasTarget);
+            Assert.IsTrue(hasTarget, "Garbage should contains the collected object");
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
             Assert.IsEmpty(garbage);
