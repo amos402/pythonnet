@@ -30,10 +30,12 @@ namespace Python.EmbeddingTest
 
         private static void FullGCCollect()
         {
+            GC.AddMemoryPressure(1000000);
+            GC.Collect(0, GCCollectionMode.Forced);
             GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
             try
             {
-                GC.WaitForFullGCComplete();
+               // GC.WaitForFullGCComplete();
             }
             catch (NotImplementedException)
             {
@@ -135,9 +137,10 @@ namespace Python.EmbeddingTest
                         break;
                     }
                 }
+                TestContext.Out.WriteLine("sleep");
                 Thread.Sleep(1000);
             } while (!found && stopwatch.Elapsed < new TimeSpan(60000));
-            TestContext.Out.WriteLine("garbage count: {0}", garbage.Count);
+            TestContext.Out.WriteLine("garbage count: {0} {1}", garbage.Count, found);
             Assert.IsTrue(found);
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
@@ -151,7 +154,7 @@ namespace Python.EmbeddingTest
                     {
                         continue;
                     }
-                    TestContext.Out.WriteLine(obj.Traceback);
+                    //TestContext.Out.WriteLine(obj.Traceback);
                 }
             }
             Assert.IsEmpty(garbage);

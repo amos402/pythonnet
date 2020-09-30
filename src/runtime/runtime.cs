@@ -139,7 +139,6 @@ namespace Python.Runtime
             }
             ShutdownMode = mode;
 
-            IntPtr state = IntPtr.Zero;
             if (Py_IsInitialized() == 0)
             {
                 Py_InitializeEx(initSigs ? 1 : 0);
@@ -154,12 +153,13 @@ namespace Python.Runtime
                     RuntimeState.Save();
                 }
             }
-            else if (!fromPython)
+            else
             {
                 // If we're coming back from a domain reload or a soft shutdown,
                 // we have previously released the thread state. Restore the main
                 // thread state here.
-                PyEval_RestoreThread(PyGILState_GetThisThreadState());
+                //PyEval_RestoreThread(PyGILState_GetThisThreadState());
+                PyGILState_Ensure();
             }
             MainManagedThreadId = Thread.CurrentThread.ManagedThreadId;
 
