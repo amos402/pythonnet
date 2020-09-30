@@ -170,7 +170,7 @@ namespace Python.Runtime
         /// interpreter lock (GIL) to call this method.
         /// initSigs can be set to 1 to do default python signal configuration. This will override the way signals are handled by the application.
         /// </remarks>
-        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default, bool fromPython = false)
+        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
         {
             if (initialized)
             {
@@ -182,7 +182,7 @@ namespace Python.Runtime
             // during an initial "import clr", and the world ends shortly thereafter.
             // This is probably masking some bad mojo happening somewhere in Runtime.Initialize().
             delegateManager = new DelegateManager();
-            Runtime.Initialize(initSigs, mode, fromPython);
+            Runtime.Initialize(initSigs, mode);
             initialized = true;
             Exceptions.Clear();
 
