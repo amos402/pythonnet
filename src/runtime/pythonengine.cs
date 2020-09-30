@@ -234,7 +234,8 @@ namespace Python.Runtime
                 // add the imported module to the clr module, and copy the API functions
                 // and decorators into the main clr module.
                 Runtime.PyDict_SetItemString(clr_dict, "_extras", module);
-                foreach (PyObject key in locals.Keys())
+                using (var keys = locals.Keys())
+                foreach (PyObject key in keys)
                 {
                     if (!key.ToString().StartsWith("_") || key.ToString().Equals("__version__"))
                     {

@@ -102,13 +102,20 @@ namespace Python.EmbeddingTest
         public void CollectOnShutdown()
         {
             IntPtr op;
+
+            WeakReference shortWeak;
+            WeakReference longWeak;
             {
-                MakeAGarbage(out var shortWeak, out var longWeak);
-                var obj = (PyObject)shortWeak.Target;
-                op = obj.Handle;
+                op = MakeAGarbage(out shortWeak, out longWeak);
+            }
+            {
+                //var obj = (PyObject)shortWeak.Target;
+                //op = obj.Handle;
                 shortWeak = null;
                 longWeak = null;
+                //obj = null;
             }
+            //}
             bool found = false;
             List<WeakReference> garbage = null;
             var stopwatch = new Stopwatch();
@@ -117,7 +124,7 @@ namespace Python.EmbeddingTest
             {
                 FullGCCollect();
                 garbage = Finalizer.Instance.GetCollectedObjects();
-                Assert.IsNotEmpty(garbage);
+               // Assert.IsNotEmpty(garbage);
                 foreach (var item in garbage)
                 {
                     var obj = item.Target as PyObject;
@@ -128,7 +135,8 @@ namespace Python.EmbeddingTest
                         break;
                     }
                 }
-            } while (!found);
+                Thread.Sleep(1000);
+            } while (!found && stopwatch.Elapsed < new TimeSpan(60000));
 
             Assert.IsTrue(found);
             PythonEngine.Shutdown();
@@ -149,12 +157,12 @@ namespace Python.EmbeddingTest
             Assert.IsEmpty(garbage);
         }
 
-        private static void MakeAGarbage(out WeakReference shortWeak, out WeakReference longWeak)
+        private static IntPtr MakeAGarbage(out WeakReference shortWeak, out WeakReference longWeak)
         {
             PyLong obj = new PyLong(1024);
             shortWeak = new WeakReference(obj);
             longWeak = new WeakReference(obj, true);
-            obj = null;
+            return obj.Handle;
         }
 
         private static long CompareWithFinalizerOn(PyObject pyCollect, bool enbale)
