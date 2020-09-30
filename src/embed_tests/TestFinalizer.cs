@@ -128,7 +128,7 @@ namespace Python.EmbeddingTest
                         break;
                     }
                 }
-            } while (!found && stopwatch.Elapsed < new TimeSpan(60000));
+            } while (!found);
 
             Assert.IsTrue(found);
             PythonEngine.Shutdown();
