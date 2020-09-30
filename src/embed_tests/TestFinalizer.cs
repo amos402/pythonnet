@@ -28,20 +28,22 @@ namespace Python.EmbeddingTest
             PythonEngine.Shutdown();
         }
 
-        private static void FullGCCollect()
+        private static bool FullGCCollect()
         {
-            GC.AddMemoryPressure(1000000);
-            GC.Collect(0, GCCollectionMode.Forced);
-            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
+            GC.Collect();
             try
             {
-               // GC.WaitForFullGCComplete();
+                return GC.WaitForFullGCComplete() == GCNotificationStatus.Succeeded;
             }
             catch (NotImplementedException)
             {
                 // Some clr runtime didn't implement GC.WaitForFullGCComplete yet.
+                return false;
             }
-            GC.WaitForPendingFinalizers();
+            finally
+            {
+                GC.WaitForPendingFinalizers();
+            }
         }
 
         [Test]
@@ -103,60 +105,21 @@ namespace Python.EmbeddingTest
         [Test]
         public void CollectOnShutdown()
         {
-            IntPtr op;
-
-            WeakReference shortWeak;
-            WeakReference longWeak;
+            IntPtr op = MakeAGarbage(out var shortWeak, out var longWeak);
+            if (!FullGCCollect())
             {
-                op = MakeAGarbage(out shortWeak, out longWeak);
+                Assert.IsTrue(WaitObjectDead(shortWeak, 10000));
             }
+            else
             {
-                //var obj = (PyObject)shortWeak.Target;
-                //op = obj.Handle;
-                shortWeak = null;
-                longWeak = null;
-                //obj = null;
+                Assert.IsFalse(shortWeak.IsAlive);
             }
-            //}
-            bool found = false;
-            List<WeakReference> garbage = null;
-            var stopwatch = new Stopwatch();
-            stopwatch.Start();
-            do
-            {
-                FullGCCollect();
-                garbage = Finalizer.Instance.GetCollectedObjects();
-               // Assert.IsNotEmpty(garbage);
-                foreach (var item in garbage)
-                {
-                    var obj = item.Target as PyObject;
-                    if (obj == null) continue;
-                    if (obj.Handle == op)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-                TestContext.Out.WriteLine("sleep");
-                Thread.Sleep(1000);
-            } while (!found && stopwatch.Elapsed < new TimeSpan(0, 2, 0));
-            TestContext.Out.WriteLine("garbage count: {0} {1}", garbage.Count, found);
-            Assert.IsTrue(found);
+            var garbage = Finalizer.Instance.GetCollectedObjects();
+            Assert.IsNotEmpty(garbage);
+            bool hasTarget = garbage.Any(r => ((IPyDisposable)r.Target).GetTrackedHandles().Contains(op));
+            Assert.IsTrue(hasTarget);
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
-            if (garbage.Count > 0)
-            {
-                foreach (var item in garbage)
-                {
-                    if (!item.IsAlive) continue;
-                    var obj = item.Target as PyObject;
-                    if (obj == null)
-                    {
-                        continue;
-                    }
-                    //TestContext.Out.WriteLine(obj.Traceback);
-                }
-            }
             Assert.IsEmpty(garbage);
         }
 
@@ -322,5 +285,15 @@ namespace Python.EmbeddingTest
             return s1.Handle;
         }
 
+
+        private static bool WaitObjectDead(WeakReference reference, int milliseconds)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            while (reference.IsAlive && stopwatch.ElapsedMilliseconds < milliseconds)
+            {
+                Thread.Sleep(10);
+            }
+            return !reference.IsAlive;
+        }
     }
 }
