@@ -137,7 +137,7 @@ namespace Python.EmbeddingTest
                 }
                 Thread.Sleep(1000);
             } while (!found && stopwatch.Elapsed < new TimeSpan(60000));
-
+            TestContext.Out.WriteLine("garbage count: {0}", garbage.Count);
             Assert.IsTrue(found);
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
