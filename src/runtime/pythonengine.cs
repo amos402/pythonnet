@@ -155,9 +155,9 @@ namespace Python.Runtime
             Initialize(setSysArgv: true);
         }
 
-        public static void Initialize(bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default, bool fromPython = false)
+        public static void Initialize(bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
         {
-            Initialize(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode, fromPython: fromPython);
+            Initialize(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode);
         }
 
         /// <summary>
@@ -266,7 +266,7 @@ namespace Python.Runtime
         {
             try
             {
-                Initialize(setSysArgv: false, fromPython: true);
+                Initialize(setSysArgv: false);
 
                 // Trickery - when the import hook is installed into an already
                 // running Python, the standard import machinery is still in
