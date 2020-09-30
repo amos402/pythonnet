@@ -30,7 +30,7 @@ namespace Python.EmbeddingTest
 
         private static bool FullGCCollect()
         {
-            GC.Collect();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced);
             try
             {
                 return GC.WaitForFullGCComplete() == GCNotificationStatus.Succeeded;
@@ -106,18 +106,18 @@ namespace Python.EmbeddingTest
         public void CollectOnShutdown()
         {
             IntPtr op = MakeAGarbage(out var shortWeak, out var longWeak);
+            int hash = shortWeak.Target.GetHashCode();
+            List<WeakReference> garbage;
             if (!FullGCCollect())
             {
-                Assert.IsTrue(WaitObjectDead(shortWeak, 10000));
+                //Assert.IsTrue(WaitForCollected(op, hash, 10000));
             }
-            else
-            {
-                Assert.IsFalse(shortWeak.IsAlive);
-            }
-            var garbage = Finalizer.Instance.GetCollectedObjects();
+            Assert.IsFalse(shortWeak.IsAlive);
+            garbage = Finalizer.Instance.GetCollectedObjects();
             Assert.IsNotEmpty(garbage, "The garbage object should be collected");
-            bool hasTarget = garbage.Any(r => ((IPyDisposable)r.Target).GetTrackedHandles().Contains(op));
-            Assert.IsTrue(hasTarget, "Garbage should contains the collected object");
+            Assert.IsTrue(garbage.Any(r => ReferenceEquals(r.Target, longWeak.Target)),
+                "Garbage should contains the collected object");
+
             PythonEngine.Shutdown();
             garbage = Finalizer.Instance.GetCollectedObjects();
             Assert.IsEmpty(garbage);
@@ -285,15 +285,28 @@ namespace Python.EmbeddingTest
             return s1.Handle;
         }
 
-
-        private static bool WaitObjectDead(WeakReference reference, int milliseconds)
+        private static bool WaitForCollected(IntPtr op, int hash, int milliseconds)
         {
             var stopwatch = Stopwatch.StartNew();
-            while (reference.IsAlive && stopwatch.ElapsedMilliseconds < milliseconds)
+            do
             {
-                Thread.Sleep(10);
-            }
-            return !reference.IsAlive;
+                var garbage = Finalizer.Instance.GetCollectedObjects();
+                foreach (var item in garbage)
+                {
+                    // The validation is not 100% precise,
+                    // but it's rare that two conditions satisfied but they're still not the same object.
+                    if (item.Target.GetHashCode() != hash)
+                    {
+                        continue;
+                    }
+                    var obj = (IPyDisposable)item.Target;
+                    if (obj.GetTrackedHandles().Contains(op))
+                    {
+                        return true;
+                    }
+                }
+            } while (stopwatch.ElapsedMilliseconds < milliseconds);
+            return false;
         }
     }
 }
