@@ -110,7 +110,7 @@ namespace Python.EmbeddingTest
             List<WeakReference> garbage;
             if (!FullGCCollect())
             {
-                //Assert.IsTrue(WaitForCollected(op, hash, 10000));
+                Assert.IsTrue(WaitForCollected(op, hash, 10000));
             }
             Assert.IsFalse(shortWeak.IsAlive);
             garbage = Finalizer.Instance.GetCollectedObjects();
