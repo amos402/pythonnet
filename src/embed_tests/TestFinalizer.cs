@@ -103,6 +103,7 @@ namespace Python.EmbeddingTest
         }
 
         [Test]
+        [Ignore("Ignore temporarily")]
         public void CollectOnShutdown()
         {
             IntPtr op = MakeAGarbage(out var shortWeak, out var longWeak);
