@@ -191,7 +191,10 @@ namespace Python.Runtime.Platform
         {
             var res = WindowsLoader.LoadLibrary(dllToLoad);
             if (res == IntPtr.Zero)
-                throw new DllNotFoundException($"Could not load {dllToLoad}", new Win32Exception());
+            {
+                int err = Marshal.GetLastWin32Error();
+                throw new DllNotFoundException($"Could not load {dllToLoad}", new Win32Exception(err));
+            }
             return res;
         }
 
