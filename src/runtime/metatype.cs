@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 
 namespace Python.Runtime
 {
@@ -103,13 +105,20 @@ namespace Python.Runtime
             var cb = GetManagedObject(base_type) as ClassBase;
             if (cb != null)
             {
-                if (!cb.CanSubclass())
+                try
                 {
-                    return Exceptions.RaiseTypeError("delegates, enums and array types cannot be subclassed");
+                    if (!cb.CanSubclass())
+                    {
+                        return Exceptions.RaiseTypeError("delegates, enums and array types cannot be subclassed");
+                    }
+                }
+                catch (SerializationException)
+                {
+                    return Exceptions.RaiseTypeError($"Underlying C# Base class {cb.type} has been deleted");
                 }
             }
 
-            IntPtr slots = Runtime.PyDict_GetItemString(dict, "__slots__");
+            IntPtr slots = Runtime.PyDict_GetItem(dict, PyIdentifier.__slots__);
             if (slots != IntPtr.Zero)
             {
                 return Exceptions.RaiseTypeError("subclasses of managed classes do not support __slots__");
@@ -146,37 +155,16 @@ namespace Python.Runtime
             flags |= TypeFlags.Subclass;
             flags |= TypeFlags.HaveGC;
             Util.WriteCLong(type, TypeOffset.tp_flags, flags);
-
-            TypeManager.CopySlot(base_type, type, TypeOffset.tp_dealloc);
-
-            // Hmm - the standard subtype_traverse, clear look at ob_size to
-            // do things, so to allow gc to work correctly we need to move
-            // our hidden handle out of ob_size. Then, in theory we can
-            // comment this out and still not crash.
-            TypeManager.CopySlot(base_type, type, TypeOffset.tp_traverse);
-            TypeManager.CopySlot(base_type, type, TypeOffset.tp_clear);
-
-
             // for now, move up hidden handle...
-            IntPtr gc = Marshal.ReadIntPtr(base_type, TypeOffset.magic());
-            Marshal.WriteIntPtr(type, TypeOffset.magic(), gc);
-
+            unsafe
+            {
+                var baseTypeEx = ClrMetaTypeEx.FromType(base_type);
+                var typeEx = ClrMetaTypeEx.FromType(type);
+                typeEx->ClrHandleOffset = (IntPtr)(OriginalObjectOffsets.Size + ManagedDataOffsets.ob_data);
+                typeEx->ClrHandle = baseTypeEx->ClrHandle;
+            }
             return type;
         }
-
-
-        public static IntPtr tp_alloc(IntPtr mt, int n)
-        {
-            IntPtr type = Runtime.PyType_GenericAlloc(mt, n);
-            return type;
-        }
-
-
-        public static void tp_free(IntPtr tp)
-        {
-            Runtime.PyObject_GC_Del(tp);
-        }
-
 
         /// <summary>
         /// Metatype __call__ implementation. This is needed to ensure correct
@@ -197,7 +185,7 @@ namespace Python.Runtime
                 return IntPtr.Zero;
             }
 
-            var init = Runtime.PyObject_GetAttrString(obj, "__init__");
+            var init = Runtime.PyObject_GetAttr(obj, PyIdentifier.__init__);
             Runtime.PyErr_Clear();
 
             if (init != IntPtr.Zero)
@@ -280,7 +268,7 @@ namespace Python.Runtime
             var flags = Util.ReadCLong(tp, TypeOffset.tp_flags);
             if ((flags & TypeFlags.Subclass) == 0)
             {
-                IntPtr gc = Marshal.ReadIntPtr(tp, TypeOffset.magic());
+                IntPtr gc = Marshal.ReadIntPtr(tp, ObjectOffset.magic(Runtime.PyObject_TYPE(tp)));
                 ((GCHandle)gc).Free();
             }
 
@@ -296,11 +284,17 @@ namespace Python.Runtime
             NativeCall.Void_Call_1(op, tp);
         }
 
+        public static int tp_clear(IntPtr ob)
+        {
+            ClearObjectDict(ob);
+            return 0;
+        }
+
         private static IntPtr DoInstanceCheck(IntPtr tp, IntPtr args, bool checkType)
         {
             var cb = GetManagedObject(tp) as ClassBase;
 
-            if (cb == null)
+            if (cb == null || !cb.type.Valid)
             {
                 Runtime.XIncref(Runtime.PyFalse);
                 return Runtime.PyFalse;
@@ -332,13 +326,13 @@ namespace Python.Runtime
                 }
 
                 var otherCb = GetManagedObject(otherType.Handle) as ClassBase;
-                if (otherCb == null)
+                if (otherCb == null || !otherCb.type.Valid)
                 {
                     Runtime.XIncref(Runtime.PyFalse);
                     return Runtime.PyFalse;
                 }
 
-                return Converter.ToPython(cb.type.IsAssignableFrom(otherCb.type));
+                return Converter.ToPython(cb.type.Value.IsAssignableFrom(otherCb.type.Value));
             }
         }
 
@@ -352,4 +346,18 @@ namespace Python.Runtime
             return DoInstanceCheck(tp, args, true);
         }
     }
+
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct ClrMetaTypeEx
+    {
+        public nint ClrHandleOffset;
+        public IntPtr ClrHandle;
+
+        public static unsafe ClrMetaTypeEx* FromType(IntPtr type)
+        {
+            return (ClrMetaTypeEx*)(type + TypeOffset.Size);
+        }
+    }
+
 }

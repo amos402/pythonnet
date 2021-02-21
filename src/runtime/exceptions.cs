@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Python.Runtime
 {
@@ -71,17 +72,26 @@ namespace Python.Runtime
                 return Exceptions.RaiseTypeError("invalid object");
             }
 
-            string message = string.Empty;
-            if (e.Message != string.Empty)
+            string message = e.ToString();
+            string fullTypeName = e.GetType().FullName;
+            string prefix = fullTypeName + ": ";
+            if (message.StartsWith(prefix))
             {
-                message = e.Message;
+                message = message.Substring(prefix.Length);
             }
-            if (!string.IsNullOrEmpty(e.StackTrace))
+            else if (message.StartsWith(fullTypeName))
             {
-                message = message + "\n" + e.StackTrace;
+                message = message.Substring(fullTypeName.Length);
             }
             return Runtime.PyUnicode_FromString(message);
         }
+
+        public static int tp_init(IntPtr ob, IntPtr args, IntPtr kwds)
+        {
+            Exceptions.SetArgsAndCause(ob);
+            return 0;
+        }
+
     }
 
     /// <summary>
@@ -177,26 +187,36 @@ namespace Python.Runtime
                 args = Runtime.PyTuple_New(0);
             }
 
-            Marshal.WriteIntPtr(ob, ExceptionOffset.args, args);
-
+            int baseOffset = OriginalObjectOffsets.Size;
+            Runtime.Py_SETREF(ob, baseOffset + ExceptionOffset.args, args);
+            
             if (e.InnerException != null)
             {
-                IntPtr cause = CLRObject.GetInstHandle(e.InnerException);
-                Marshal.WriteIntPtr(ob, ExceptionOffset.cause, cause);
+                IntPtr cause = GetExceptHandle(e.InnerException);
+                Runtime.Py_SETREF(ob, baseOffset + ExceptionOffset.cause, cause);
             }
+        }
+
+        internal static IntPtr GetExceptHandle(Exception e)
+        {
+            IntPtr op = CLRObject.GetInstHandle(e);
+            SetArgsAndCause(op);
+            return op;
         }
 
         /// <summary>
         /// Shortcut for (pointer == NULL) -&gt; throw PythonException
         /// </summary>
         /// <param name="pointer">Pointer to a Python object</param>
-        internal static void ErrorCheck(IntPtr pointer)
+        internal static void ErrorCheck(BorrowedReference pointer)
         {
-            if (pointer == IntPtr.Zero)
+            if (pointer.IsNull)
             {
                 throw new PythonException();
             }
         }
+
+        internal static void ErrorCheck(IntPtr pointer) => ErrorCheck(new BorrowedReference(pointer));
 
         /// <summary>
         /// Shortcut for (pointer == NULL or ErrorOccurred()) -&gt; throw PythonException
@@ -283,11 +303,25 @@ namespace Python.Runtime
                 return;
             }
 
-            IntPtr op = CLRObject.GetInstHandle(e);
-            IntPtr etype = Runtime.PyObject_GetAttrString(op, "__class__");
+            IntPtr op = GetExceptHandle(e);
+            IntPtr etype = Runtime.PyObject_GetAttr(op, PyIdentifier.__class__);
             Runtime.PyErr_SetObject(new BorrowedReference(etype), new BorrowedReference(op));
             Runtime.XDecref(etype);
             Runtime.XDecref(op);
+        }
+
+        /// <summary>
+        /// When called after SetError, sets the cause of the error.
+        /// </summary>
+        /// <param name="cause">The cause of the current error</param>
+        public static void SetCause(PythonException cause)
+        {
+            var currentException = new PythonException();
+            currentException.Normalize();
+            cause.Normalize();
+            Runtime.XIncref(cause.PyValue);
+            Runtime.PyException_SetCause(currentException.PyValue, cause.PyValue);
+            currentException.Restore();
         }
 
         /// <summary>
@@ -368,17 +402,31 @@ namespace Python.Runtime
         // Internal helper methods for common error handling scenarios.
         //====================================================================
 
+        /// <summary>
+        /// Raises a TypeError exception and attaches any existing exception as its cause.
+        /// </summary>
+        /// <param name="message">The exception message</param>
+        /// <returns><c>IntPtr.Zero</c></returns>
         internal static IntPtr RaiseTypeError(string message)
         {
+            PythonException previousException = null;
+            if (ErrorOccurred())
+            {
+                previousException = new PythonException();
+            }
             Exceptions.SetError(Exceptions.TypeError, message);
+            if (previousException != null)
+            {
+                SetCause(previousException);
+            }
             return IntPtr.Zero;
         }
 
         // 2010-11-16: Arranged in python (2.6 & 2.7) source header file order
         /* Predefined exceptions are
-           puplic static variables on the Exceptions class filled in from
+           public static variables on the Exceptions class filled in from
            the python class using reflection in Initialize() looked up by
-		   name, not posistion. */
+		   name, not position. */
         public static IntPtr BaseException;
         public static IntPtr Exception;
         public static IntPtr StopIteration;

@@ -1,8 +1,7 @@
 using System;
 using System.Collections;
-using System.Diagnostics;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
 
 namespace Python.Runtime
 {
@@ -17,20 +16,33 @@ namespace Python.Runtime
     [Serializable]
     internal class ClassBase : ManagedType
     {
+        [NonSerialized]
+        internal List<string> dotNetMembers;
         internal Indexer indexer;
-        internal Type type;
+        internal Dictionary<int, MethodObject> richcompare;
+        internal MaybeType type;
 
         internal ClassBase(Type tp)
         {
+            dotNetMembers = new List<string>();
             indexer = null;
             type = tp;
         }
 
         internal virtual bool CanSubclass()
         {
-            return !type.IsEnum;
+            return !type.Value.IsEnum;
         }
 
+        public readonly static Dictionary<string, int> CilToPyOpMap = new Dictionary<string, int>
+        {
+            ["op_Equality"] = Runtime.Py_EQ,
+            ["op_Inequality"] = Runtime.Py_NE,
+            ["op_LessThanOrEqual"] = Runtime.Py_LE,
+            ["op_GreaterThanOrEqual"] = Runtime.Py_GE,
+            ["op_LessThan"] = Runtime.Py_LT,
+            ["op_GreaterThan"] = Runtime.Py_GT,
+        };
 
         /// <summary>
         /// Default implementation of [] semantics for reflected types.
@@ -43,17 +55,31 @@ namespace Python.Runtime
                 return Exceptions.RaiseTypeError("type(s) expected");
             }
 
-            Type target = GenericUtil.GenericForType(type, types.Length);
+            if (!type.Valid)
+            {
+                return Exceptions.RaiseTypeError(type.DeletedMessage);
+            }
+
+            Type target = GenericUtil.GenericForType(type.Value, types.Length);
 
             if (target != null)
             {
-                Type t = target.MakeGenericType(types);
+                Type t;
+                try
+                {
+                    // MakeGenericType can throw ArgumentException
+                    t = target.MakeGenericType(types);
+                }
+                catch (ArgumentException e)
+                {
+                    return Exceptions.RaiseTypeError(e.Message);
+                }
                 ManagedType c = ClassManager.GetClass(t);
                 Runtime.XIncref(c.pyHandle);
                 return c.pyHandle;
             }
 
-            return Exceptions.RaiseTypeError("no type matches params");
+            return Exceptions.RaiseTypeError($"{type.Value.Namespace}.{type.Name} does not accept {types.Length} generic parameters");
         }
 
         /// <summary>
@@ -63,6 +89,30 @@ namespace Python.Runtime
         {
             CLRObject co1;
             CLRObject co2;
+            IntPtr tp = Runtime.PyObject_TYPE(ob);
+            var cls = (ClassBase)GetManagedObject(tp);
+            // C# operator methods take precedence over IComparable.
+            // We first check if there's a comparison operator by looking up the richcompare table,
+            // otherwise fallback to checking if an IComparable interface is handled.
+            if (cls.richcompare.TryGetValue(op, out var methodObject))
+            {
+                // Wrap the `other` argument of a binary comparison operator in a PyTuple.
+                IntPtr args = Runtime.PyTuple_New(1);
+                Runtime.XIncref(other);
+                Runtime.PyTuple_SetItem(args, 0, other);
+
+                IntPtr value;
+                try
+                {
+                    value = methodObject.Invoke(ob, args, IntPtr.Zero);
+                }
+                finally
+                {
+                    Runtime.XDecref(args);  // Free args pytuple
+                }
+                return value;
+            }
+
             switch (op)
             {
                 case Runtime.Py_EQ:
@@ -184,7 +234,6 @@ namespace Python.Runtime
 
             var e = co.inst as IEnumerable;
             IEnumerator o;
-
             if (e != null)
             {
                 o = e.GetEnumerator();
@@ -199,21 +248,36 @@ namespace Python.Runtime
                 }
             }
 
-            return new Iterator(o).pyHandle;
+            var elemType = typeof(object);
+            var iterType = co.inst.GetType();
+            foreach(var ifc in iterType.GetInterfaces())
+            {
+                if (ifc.IsGenericType)
+                {
+                    var genTypeDef = ifc.GetGenericTypeDefinition();
+                    if (genTypeDef == typeof(IEnumerable<>) || genTypeDef == typeof(IEnumerator<>))
+                    {
+                        elemType = ifc.GetGenericArguments()[0];
+                        break;
+                    }
+                }
+            }
+
+            return new Iterator(o, elemType).pyHandle;
         }
 
 
         /// <summary>
         /// Standard __hash__ implementation for instances of reflected types.
         /// </summary>
-        public static IntPtr tp_hash(IntPtr ob)
+        public static nint tp_hash(IntPtr ob)
         {
             var co = GetManagedObject(ob) as CLRObject;
             if (co == null)
             {
                 return Exceptions.RaiseTypeError("unhashable type");
             }
-            return new IntPtr(co.inst.GetHashCode());
+            return co.inst.GetHashCode();
         }
 
 
@@ -264,7 +328,7 @@ namespace Python.Runtime
                 IntPtr args = Runtime.PyTuple_New(1);
                 Runtime.XIncref(ob);
                 Runtime.PyTuple_SetItem(args, 0, ob);
-                IntPtr reprFunc = Runtime.PyObject_GetAttrString(Runtime.PyBaseObjectType, "__repr__");
+                IntPtr reprFunc = Runtime.PyObject_GetAttr(Runtime.PyBaseObjectType, PyIdentifier.__repr__);
                 var output =  Runtime.PyObject_Call(reprFunc, args, IntPtr.Zero);
                 Runtime.XDecref(args);
                 Runtime.XDecref(reprFunc);
@@ -288,44 +352,39 @@ namespace Python.Runtime
         public static void tp_dealloc(IntPtr ob)
         {
             ManagedType self = GetManagedObject(ob);
-            tp_clear(ob);
-            Runtime.PyObject_GC_UnTrack(self.pyHandle);
-            Runtime.PyObject_GC_Del(self.pyHandle);
+            if (Runtime.PyType_SUPPORTS_WEAKREFS(Runtime.PyObject_TYPE(ob)))
+            {
+                Runtime.PyObject_ClearWeakRefs(ob);
+            }
+            RemoveObjectDict(ob);
+            Runtime.Py_CLEAR(ref self.tpHandle);
+            Runtime.PyObject_GC_UnTrack(ob);
+            Runtime.PyObject_GC_Del(ob);
             self.FreeGCHandle();
         }
 
         public static int tp_clear(IntPtr ob)
         {
-            ManagedType self = GetManagedObject(ob);
-            if (!self.IsTypeObject())
-            {
-                ClearObjectDict(ob);
-            }
-            self.tpHandle = IntPtr.Zero;
+            ClearObjectDict(ob);
             return 0;
         }
 
         protected override void OnSave(InterDomainContext context)
         {
             base.OnSave(context);
-            if (pyHandle != tpHandle)
-            {
-                IntPtr dict = GetObjectDict(pyHandle);
-                Runtime.XIncref(dict);
-                context.Storage.AddValue("dict", dict);
-            }
+            IntPtr dict = GetObjectDict(pyHandle);
+            Runtime.XIncref(dict);
+            Runtime.XIncref(tpHandle);
+            context.Storage.AddValue("dict", dict);
         }
 
         protected override void OnLoad(InterDomainContext context)
         {
             base.OnLoad(context);
-            if (pyHandle != tpHandle)
-            {
-                IntPtr dict = context.Storage.GetValue<IntPtr>("dict");
-                SetObjectDict(pyHandle, dict);
-            }
+            IntPtr dict = context.Storage.GetValue<IntPtr>("dict");
+            SetObjectDict(pyHandle, dict);
             gcHandle = AllocGCHandle();
-            Marshal.WriteIntPtr(pyHandle, TypeOffset.magic(), (IntPtr)gcHandle);
+            Marshal.WriteIntPtr(pyHandle, ObjectOffset.magic(tpHandle), (IntPtr)gcHandle);
         }
 
 

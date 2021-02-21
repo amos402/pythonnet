@@ -14,7 +14,7 @@ using PyRuntime = Python.Runtime.Runtime;
 //
 // Unfortunately this means no continuous integration testing for this case.
 //
-#if !NETSTANDARD && !NETCOREAPP
+#if NETFRAMEWORK
 namespace Python.EmbeddingTest
 {
     class TestDomainReload
@@ -179,97 +179,6 @@ obj.Field += 10
 
         #endregion
 
-        #region TestClassReference
-
-        class ReloadClassRefStep1 : CrossCaller
-        {
-            public override ValueType Execute(ValueType arg)
-            {
-                const string code = @"
-from Python.EmbeddingTest.Domain import MyClass
-
-def test_obj_call():
-    obj = MyClass()
-    obj.Method()
-    obj.StaticMethod()
-    obj.Property = 1
-    obj.Field = 10
-
-test_obj_call()
-";
-                const string name = "test_domain_reload_mod";
-                using (Py.GIL())
-                {
-                    // Create a new module
-                    IntPtr module = PyRuntime.PyModule_New(name);
-                    Assert.That(module != IntPtr.Zero);
-                    IntPtr globals = PyRuntime.PyObject_GetAttrString(module, "__dict__");
-                    Assert.That(globals != IntPtr.Zero);
-                    try
-                    {
-                        // import builtins
-                        // module.__dict__[__builtins__] = builtins
-                        int res = PyRuntime.PyDict_SetItemString(globals, "__builtins__",
-                            PyRuntime.PyEval_GetBuiltins());
-                        PythonException.ThrowIfIsNotZero(res);
-
-                        // Execute the code in the module's scope
-                        PythonEngine.Exec(code, globals);
-                        // import sys
-                        // modules = sys.modules
-                        IntPtr modules = PyRuntime.PyImport_GetModuleDict();
-                        // modules[name] = module
-                        res = PyRuntime.PyDict_SetItemString(modules, name, module);
-                        PythonException.ThrowIfIsNotZero(res);
-                    }
-                    catch
-                    {
-                        PyRuntime.XDecref(module);
-                        throw;
-                    }
-                    finally
-                    {
-                        PyRuntime.XDecref(globals);
-                    }
-                    return module;
-                }
-            }
-        }
-
-        class ReloadClassRefStep2 : CrossCaller
-        {
-            public override ValueType Execute(ValueType arg)
-            {
-                var module = (IntPtr)arg;
-                using (Py.GIL())
-                {
-                    var test_obj_call = PyRuntime.PyObject_GetAttrString(module, "test_obj_call");
-                    PythonException.ThrowIfIsNull(test_obj_call);
-                    var args = PyRuntime.PyTuple_New(0);
-                    var res = PyRuntime.PyObject_CallObject(test_obj_call, args);
-                    PythonException.ThrowIfIsNull(res);
-
-                    PyRuntime.XDecref(args);
-                    PyRuntime.XDecref(res);
-                }
-                return 0;
-            }
-        }
-
-
-        [Test]
-        /// <summary>
-        /// Create a new Python module, define a function in it.
-        /// Unload the domain, load a new one.
-        /// Make sure the function (and module) still exists.
-        /// </summary>
-        public void TestClassReference()
-        {
-            RunDomainReloadSteps<ReloadClassRefStep1, ReloadClassRefStep2>();
-        }
-
-        #endregion
-
         #region Tempary tests
 
         // https://github.com/pythonnet/pythonnet/pull/1074#issuecomment-596139665
@@ -288,7 +197,7 @@ test_obj_call()
 
                     GC.Collect();
                     GC.WaitForPendingFinalizers(); // <- this will put former `num` into Finalizer queue
-                    Finalizer.Instance.Collect(forceDispose: true);
+                    Finalizer.Instance.Collect();
                     // ^- this will call PyObject.Dispose, which will call XDecref on `num.Handle`,
                     // but Python interpreter from "run" 1 is long gone, so it will corrupt memory instead.
                     Assert.False(numRef.IsAlive);
@@ -333,7 +242,7 @@ test_obj_call()
                     PythonEngine.Initialize(); // <- "run" 2 starts
                     GC.Collect();
                     GC.WaitForPendingFinalizers();
-                    Finalizer.Instance.Collect(forceDispose: true);
+                    Finalizer.Instance.Collect();
                     Assert.False(objRef.IsAlive);
                 }
                 finally
@@ -400,7 +309,7 @@ test_obj_call()
                 return method.Invoke(null, args);
             }
         }
-        
+
         static T CreateInstanceInstanceAndUnwrap<T>(AppDomain domain)
         {
             Type type = typeof(T);
@@ -423,7 +332,7 @@ test_obj_call()
             // assembly (and Python .NET) to reside
             var theProxy = CreateInstanceInstanceAndUnwrap<Proxy>(domain);
 
-            theProxy.Call("InitPython", ShutdownMode.Soft);
+            theProxy.Call(nameof(PythonRunner.InitPython), ShutdownMode.Soft, PyRuntime.PythonDLL);
             // From now on use the Proxy to call into the new assembly
             theProxy.RunPython();
 
@@ -491,7 +400,7 @@ test_obj_call()
                 try
                 {
                     var theProxy = CreateInstanceInstanceAndUnwrap<Proxy>(domain);
-                    theProxy.Call("InitPython", ShutdownMode.Reload);
+                    theProxy.Call(nameof(PythonRunner.InitPython), ShutdownMode.Reload, PyRuntime.PythonDLL);
 
                     var caller = CreateInstanceInstanceAndUnwrap<T1>(domain);
                     arg = caller.Execute(arg);
@@ -509,7 +418,7 @@ test_obj_call()
                 try
                 {
                     var theProxy = CreateInstanceInstanceAndUnwrap<Proxy>(domain);
-                    theProxy.Call("InitPython", ShutdownMode.Reload);
+                    theProxy.Call(nameof(PythonRunner.InitPython), ShutdownMode.Reload, PyRuntime.PythonDLL);
 
                     var caller = CreateInstanceInstanceAndUnwrap<T2>(domain);
                     caller.Execute(arg);
@@ -569,8 +478,9 @@ test_obj_call()
 
         private static IntPtr _state;
 
-        public static void InitPython(ShutdownMode mode)
+        public static void InitPython(ShutdownMode mode, string dllName)
         {
+            PyRuntime.PythonDLL = dllName;
             PythonEngine.Initialize(mode: mode);
             _state = PythonEngine.BeginAllowThreads();
         }

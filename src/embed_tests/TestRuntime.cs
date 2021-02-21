@@ -18,25 +18,6 @@ namespace Python.EmbeddingTest
             }
         }
 
-        /// <summary>
-        /// Test the cache of the information from the platform module.
-        ///
-        /// Test fails on platforms we haven't implemented yet.
-        /// </summary>
-        [Test]
-        public static void PlatformCache()
-        {
-            Runtime.Runtime.Initialize();
-
-            Assert.That(NativeCodePageHelper.Machine, Is.Not.EqualTo(MachineType.Other));
-            Assert.That(!string.IsNullOrEmpty(NativeCodePageHelper.MachineName));
-
-            Assert.That(NativeCodePageHelper.OperatingSystem, Is.Not.EqualTo(OperatingSystemType.Other));
-            Assert.That(!string.IsNullOrEmpty(NativeCodePageHelper.OperatingSystemName));
-
-            Runtime.Runtime.Shutdown();
-        }
-
         [Test]
         public static void Py_IsInitializedValue()
         {
@@ -115,13 +96,15 @@ namespace Python.EmbeddingTest
             // TypeFlags.HaveIter set in Python 2. This tests a different code path in PyObject_IsIterable and PyIter_Check.
             var threading = Runtime.Runtime.PyImport_ImportModule("threading");
             Exceptions.ErrorCheck(threading);
-            var threadingDict = Runtime.Runtime.PyModule_GetDict(threading);
+            var threadingDict = Runtime.Runtime.PyModule_GetDict(new BorrowedReference(threading));
             Exceptions.ErrorCheck(threadingDict);
             var lockType = Runtime.Runtime.PyDict_GetItemString(threadingDict, "Lock");
-            if (lockType == IntPtr.Zero)
+            if (lockType.IsNull)
                 throw new KeyNotFoundException("class 'Lock' was not found in 'threading'");
 
-            var lockInstance = Runtime.Runtime.PyObject_CallObject(lockType, Runtime.Runtime.PyTuple_New(0));
+            var args = Runtime.Runtime.PyTuple_New(0);
+            var lockInstance = Runtime.Runtime.PyObject_CallObject(lockType.DangerousGetAddress(), args);
+            Runtime.Runtime.XDecref(args);
             Exceptions.ErrorCheck(lockInstance);
 
             Assert.IsFalse(Runtime.Runtime.PyObject_IsIterable(lockInstance));

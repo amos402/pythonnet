@@ -8,11 +8,6 @@ using System.Linq.Expressions;
 
 namespace Python.Runtime
 {
-    public interface IPyDisposable : IDisposable
-    {
-        IntPtr[] GetTrackedHandles();
-    }
-
     /// <summary>
     /// Represents a generic Python object. The methods of this class are
     /// generally equivalent to the Python "abstract object API". See
@@ -21,7 +16,7 @@ namespace Python.Runtime
     /// for details.
     /// </summary>
     [Serializable]
-    public partial class PyObject : DynamicObject, IEnumerable, IPyDisposable
+    public partial class PyObject : DynamicObject, IEnumerable<PyObject>, IDisposable
     {
 #if TRACE_ALLOC
         /// <summary>
@@ -54,6 +49,19 @@ namespace Python.Runtime
 #endif
         }
 
+        [Obsolete("for testing purposes only")]
+        internal PyObject(IntPtr ptr, bool skipCollect)
+        {
+            if (ptr == IntPtr.Zero) throw new ArgumentNullException(nameof(ptr));
+
+            obj = ptr;
+            if (!skipCollect)
+                Finalizer.Instance.ThrottledCollect();
+#if TRACE_ALLOC
+            Traceback = new StackTrace(1);
+#endif
+        }
+
         /// <summary>
         /// Creates new <see cref="PyObject"/> pointing to the same object as
         /// the <paramref name="reference"/>. Increments refcount, allowing <see cref="PyObject"/>
@@ -78,7 +86,7 @@ namespace Python.Runtime
             {
                 return;
             }
-            Finalizer.Instance.AddFinalizedObject(this);
+            Finalizer.Instance.AddFinalizedObject(ref obj);
         }
 
 
@@ -111,7 +119,9 @@ namespace Python.Runtime
                 Runtime.XIncref(Runtime.PyNone);
                 return new PyObject(Runtime.PyNone);
             }
-            IntPtr op = CLRObject.GetInstHandle(ob);
+            IntPtr op = typeof(Exception).IsAssignableFrom(ob.GetType()) ?
+                Exceptions.GetExceptHandle((Exception)ob)
+                : CLRObject.GetInstHandle(ob);
             return new PyObject(op);
         }
 
@@ -126,9 +136,9 @@ namespace Python.Runtime
         public object AsManagedObject(Type t)
         {
             object result;
-            if (!Converter.ToManaged(obj, t, out result, false))
+            if (!Converter.ToManaged(obj, t, out result, true))
             {
-                throw new InvalidCastException("cannot convert object to target type");
+                throw new InvalidCastException("cannot convert object to target type", new PythonException());
             }
             return result;
         }
@@ -146,14 +156,10 @@ namespace Python.Runtime
             {
                 return (T)(this as object);
             }
-            object result;
-            if (!Converter.ToManaged(obj, typeof(T), out result, false))
-            {
-                throw new InvalidCastException("cannot convert object to target type");
-            }
-            return (T)result;
+            return (T)AsManagedObject(typeof(T));
         }
 
+        internal bool IsDisposed => obj == IntPtr.Zero;
 
         /// <summary>
         /// Dispose Method
@@ -202,6 +208,10 @@ namespace Python.Runtime
                     Runtime.XDecref(this.obj);
                 }
             }
+            else
+            {
+                throw new InvalidOperationException("Runtime is already finalizing");
+            }
             this.obj = IntPtr.Zero;
         }
 
@@ -209,11 +219,6 @@ namespace Python.Runtime
         {
             Dispose(true);
             GC.SuppressFinalize(this);
-        }
-
-        public IntPtr[] GetTrackedHandles()
-        {
-            return new IntPtr[] { obj };
         }
 
         /// <summary>
@@ -255,7 +260,7 @@ namespace Python.Runtime
         {
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            return Runtime.PyObject_HasAttrString(obj, name) != 0;
+            return Runtime.PyObject_HasAttrString(Reference, name) != 0;
         }
 
 
@@ -270,7 +275,7 @@ namespace Python.Runtime
         {
             if (name == null) throw new ArgumentNullException(nameof(name));
 
-            return Runtime.PyObject_HasAttr(obj, name.obj) != 0;
+            return Runtime.PyObject_HasAttr(Reference, name.Reference) != 0;
         }
 
 
@@ -698,10 +703,11 @@ namespace Python.Runtime
         /// python object to be iterated over in C#. A PythonException will be
         /// raised if the object is not iterable.
         /// </remarks>
-        public IEnumerator GetEnumerator()
+        public IEnumerator<PyObject> GetEnumerator()
         {
             return PyIter.GetIter(this);
         }
+        IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
 
         /// <summary>

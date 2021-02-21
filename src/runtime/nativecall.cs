@@ -12,14 +12,6 @@ namespace Python.Runtime
     /// C API can just be wrapped with p/invoke, but there are some
     /// situations (specifically, calling functions through Python
     /// type structures) where we need to call functions indirectly.
-    /// This class uses Reflection.Emit to generate IJW thunks that
-    /// support indirect calls to native code using various common
-    /// call signatures. This is mainly a workaround for the fact
-    /// that you can't spell an indirect call in C# (but can in IL).
-    /// Another approach that would work is for this to be turned
-    /// into a separate utility program that could be run during the
-    /// build process to generate the thunks as a separate assembly
-    /// that could then be referenced by the main Python runtime.
     /// </summary>
     internal class NativeCall
     {
@@ -48,10 +40,15 @@ namespace Python.Runtime
             return d(a1, a2, a3);
         }
 
-        private static T GetDelegate<T>(IntPtr fp) where T: Delegate
+        internal static T GetDelegate<T>(IntPtr fp) where T: Delegate
         {
-            // Use Marshal.GetDelegateForFunctionPointer<> directly after upgrade the framework
-            return (T)Marshal.GetDelegateForFunctionPointer(fp, typeof(T));
+            Delegate d = null;
+            if (!Interop.allocatedThunks.TryGetValue(fp, out d))
+            {
+                // We don't cache this delegate because this is a pure delegate ot unmanaged.
+                d = Marshal.GetDelegateForFunctionPointer<T>(fp);
+            }
+            return (T)d;
         }
     }
 }

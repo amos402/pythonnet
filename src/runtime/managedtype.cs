@@ -26,6 +26,7 @@ namespace Python.Runtime
 
         internal IntPtr pyHandle; // PyObject *
         internal IntPtr tpHandle; // PyType *
+        internal BorrowedReference ObjectReference => new BorrowedReference(pyHandle);
 
         private static readonly Dictionary<ManagedType, TrackTypes> _managedObjs = new Dictionary<ManagedType, TrackTypes>();
 
@@ -75,34 +76,35 @@ namespace Python.Runtime
             }
         }
 
+        internal static ManagedType GetManagedObject(BorrowedReference ob)
+            => GetManagedObject(ob.DangerousGetAddress());
         /// <summary>
         /// Given a Python object, return the associated managed object or null.
         /// </summary>
         internal static ManagedType GetManagedObject(IntPtr ob)
         {
-            if (ob != IntPtr.Zero)
+            if (ob == IntPtr.Zero)
             {
-                IntPtr tp = Runtime.PyObject_TYPE(ob);
-                if (tp == Runtime.PyTypeType || tp == Runtime.PyCLRMetaType)
-                {
-                    tp = ob;
-                }
-
-                var flags = Util.ReadCLong(tp, TypeOffset.tp_flags);
-                if ((flags & TypeFlags.Managed) != 0)
-                {
-                    IntPtr op = tp == ob
-                        ? Marshal.ReadIntPtr(tp, TypeOffset.magic())
-                        : Marshal.ReadIntPtr(ob, ObjectOffset.magic(tp));
-                    if (op == IntPtr.Zero)
-                    {
-                        return null;
-                    }
-                    var gc = (GCHandle)op;
-                    return (ManagedType)gc.Target;
-                }
+                return null;
             }
-            return null;
+            IntPtr tp = Runtime.PyObject_TYPE(ob);
+            var flags = Util.ReadCLong(tp, TypeOffset.tp_flags);
+            if ((flags & TypeFlags.Managed) == 0)
+            {
+                return null;
+            }
+            int offset = ObjectOffset.magic(tp);
+            if (offset == 0)
+            {
+                return null;
+            }
+            IntPtr op = Marshal.ReadIntPtr(ob, offset);
+            if (op == IntPtr.Zero)
+            {
+                return null;
+            }
+            var gc = (GCHandle)op;
+            return (ManagedType)gc.Target;
         }
 
         /// <summary>
@@ -110,18 +112,12 @@ namespace Python.Runtime
         /// </summary>
         internal static ManagedType GetManagedObjectType(IntPtr ob)
         {
-            if (ob != IntPtr.Zero)
+            if (ob == IntPtr.Zero)
             {
-                IntPtr tp = Runtime.PyObject_TYPE(ob);
-                var flags = Util.ReadCLong(tp, TypeOffset.tp_flags);
-                if ((flags & TypeFlags.Managed) != 0)
-                {
-                    tp = Marshal.ReadIntPtr(tp, TypeOffset.magic());
-                    var gc = (GCHandle)tp;
-                    return (ManagedType)gc.Target;
-                }
+                return null;
             }
-            return null;
+            IntPtr tp = Runtime.PyObject_TYPE(ob);
+            return GetManagedObject(tp);
         }
 
 
@@ -136,16 +132,13 @@ namespace Python.Runtime
         }
 
 
+        internal static bool IsManagedType(BorrowedReference ob)
+            => IsManagedType(ob.DangerousGetAddressOrNull());
         internal static bool IsManagedType(IntPtr ob)
         {
             if (ob != IntPtr.Zero)
             {
                 IntPtr tp = Runtime.PyObject_TYPE(ob);
-                if (tp == Runtime.PyTypeType || tp == Runtime.PyCLRMetaType)
-                {
-                    tp = ob;
-                }
-
                 var flags = Util.ReadCLong(tp, TypeOffset.tp_flags);
                 if ((flags & TypeFlags.Managed) != 0)
                 {
@@ -153,11 +146,6 @@ namespace Python.Runtime
                 }
             }
             return false;
-        }
-
-        public bool IsTypeObject()
-        {
-            return pyHandle == tpHandle;
         }
 
         internal static IDictionary<ManagedType, TrackTypes> GetManagedObjects()
@@ -176,7 +164,7 @@ namespace Python.Runtime
             {
                 return 0;
             }
-            var visitFunc = (Interop.ObjObjFunc)Marshal.GetDelegateForFunctionPointer(visit, typeof(Interop.ObjObjFunc));
+            var visitFunc = NativeCall.GetDelegate<Interop.ObjObjFunc>(visit);
             return visitFunc(ob, arg);
         }
 
@@ -194,7 +182,7 @@ namespace Python.Runtime
             {
                 return;
             }
-            var clearFunc = (Interop.InquiryFunc)Marshal.GetDelegateForFunctionPointer(clearPtr, typeof(Interop.InquiryFunc));
+            var clearFunc = NativeCall.GetDelegate<Interop.InquiryFunc>(clearPtr);
             clearFunc(pyHandle);
         }
 
@@ -212,7 +200,8 @@ namespace Python.Runtime
             {
                 return;
             }
-            var traverseFunc = (Interop.ObjObjArgFunc)Marshal.GetDelegateForFunctionPointer(traversePtr, typeof(Interop.ObjObjArgFunc));
+            var traverseFunc = NativeCall.GetDelegate<Interop.ObjObjArgFunc>(traversePtr);
+
             var visiPtr = Marshal.GetFunctionPointerForDelegate(visitproc);
             traverseFunc(pyHandle, visiPtr, arg);
         }
@@ -236,6 +225,16 @@ namespace Python.Runtime
         protected virtual void OnLoad(InterDomainContext context) { }
 
         protected static void ClearObjectDict(IntPtr ob)
+        {
+            IntPtr dict = GetObjectDict(ob);
+            if (dict == IntPtr.Zero)
+            {
+                return;
+            }
+            Runtime.PyDict_Clear(dict);
+        }
+
+        protected static void RemoveObjectDict(IntPtr ob)
         {
             IntPtr dict = GetObjectDict(ob);
             if (dict == IntPtr.Zero)
