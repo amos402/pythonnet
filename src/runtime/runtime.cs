@@ -2043,8 +2043,6 @@ namespace Python.Runtime
 
         internal static void PyObject_GC_Del(IntPtr tp) => Delegates.PyObject_GC_Del(tp);
 
-        internal static IntPtr _PyObject_GC_Calloc(IntPtr basicsize) => Delegates._PyObject_GC_Calloc(basicsize);
-
         internal static void PyObject_GC_Track(IntPtr tp) => Delegates.PyObject_GC_Track(tp);
 
         internal static void PyObject_GC_UnTrack(IntPtr tp) => Delegates.PyObject_GC_UnTrack(tp);
@@ -2501,7 +2499,6 @@ namespace Python.Runtime
                 PyObject_GenericSetAttr = (delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, int>)GetFunctionByName(nameof(PyObject_GenericSetAttr), GetUnmanagedDll(_PythonDll));
                 _PyObject_GetDictPtr = (delegate* unmanaged[Cdecl]<BorrowedReference, BorrowedReference*>)GetFunctionByName(nameof(_PyObject_GetDictPtr), GetUnmanagedDll(_PythonDll));
                 PyObject_GC_Del = (delegate* unmanaged[Cdecl]<IntPtr, void>)GetFunctionByName(nameof(PyObject_GC_Del), GetUnmanagedDll(_PythonDll));
-                _PyObject_GC_Calloc = (delegate* unmanaged[Cdecl]<IntPtr, IntPtr>)GetFunctionByName(nameof(_PyObject_GC_Calloc), GetUnmanagedDll(_PythonDll));
                 PyObject_GC_Track = (delegate* unmanaged[Cdecl]<IntPtr, void>)GetFunctionByName(nameof(PyObject_GC_Track), GetUnmanagedDll(_PythonDll));
                 PyObject_GC_UnTrack = (delegate* unmanaged[Cdecl]<IntPtr, void>)GetFunctionByName(nameof(PyObject_GC_UnTrack), GetUnmanagedDll(_PythonDll));
                 _PyObject_Dump = (delegate* unmanaged[Cdecl]<IntPtr, void>)GetFunctionByName(nameof(_PyObject_Dump), GetUnmanagedDll(_PythonDll));
@@ -2768,7 +2765,6 @@ namespace Python.Runtime
             internal static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, int> PyObject_GenericSetAttr { get; }
             internal static delegate* unmanaged[Cdecl]<BorrowedReference, BorrowedReference*> _PyObject_GetDictPtr { get; }
             internal static delegate* unmanaged[Cdecl]<IntPtr, void> PyObject_GC_Del { get; }
-            internal static delegate* unmanaged[Cdecl]<IntPtr, IntPtr> _PyObject_GC_Calloc { get; }
             internal static delegate* unmanaged[Cdecl]<IntPtr, void> PyObject_GC_Track { get; }
             internal static delegate* unmanaged[Cdecl]<IntPtr, void> PyObject_GC_UnTrack { get; }
             internal static delegate* unmanaged[Cdecl]<IntPtr, void> _PyObject_Dump { get; }

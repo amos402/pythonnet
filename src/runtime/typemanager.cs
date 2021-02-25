@@ -473,17 +473,15 @@ namespace Python.Runtime
             Debug.Assert(heapTypeSize == TypeOffset.Size);
             int metaSize = heapTypeSize + Marshal.SizeOf(typeof(ClrMetaTypeEx));
 
-            IntPtr type = Runtime._PyObject_GC_Calloc(new IntPtr(metaSize));
+            IntPtr type = Runtime.PyType_GenericAlloc(Runtime.PyTypeType, 0);
             Runtime.XIncref(py_type);
             Marshal.WriteIntPtr(type, TypeOffset.tp_base, py_type);
             Marshal.WriteIntPtr(type, TypeOffset.ob_refcnt, (IntPtr)1);
             Marshal.WriteIntPtr(type, TypeOffset.tp_basicsize, (IntPtr)metaSize);
-            Marshal.WriteIntPtr(type, heapTypeSize, (IntPtr)(heapTypeSize + IntPtr.Size));
 
             SetupHeapType(type, "CLR Metatype");
 
             const int flags = TypeFlags.Default
-                            | TypeFlags.Managed
                             | TypeFlags.HeapType
                             | TypeFlags.HaveGC;
             Util.WriteCLong(type, TypeOffset.tp_flags, flags);
