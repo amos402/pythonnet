@@ -322,9 +322,9 @@ namespace Python.Runtime
 
             PyScopeManager.Global.Clear();
             ExecuteShutdownHandlers();
+            PyObjectConversions.Reset();
             // Remember to shut down the runtime.
             Runtime.Shutdown(mode);
-            PyObjectConversions.Reset();
 
             initialized = false;
         }
